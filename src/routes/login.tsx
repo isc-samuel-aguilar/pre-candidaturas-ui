@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Box, Card, CardContent, Typography, TextField, Button, Alert, CircularProgress, IconButton } from '@mui/material'
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Brightness4Icon from '@mui/icons-material/Brightness4'
 import Brightness7Icon from '@mui/icons-material/Brightness7'
 import { useTheme } from '../contexts/ThemeContext'
@@ -17,24 +17,53 @@ export const Route = createFileRoute('/login')({
   component: LoginPage,
 })
 
+const MAX_LOGIN_ATTEMPTS = 5
+const LOCKOUT_DURATION_MS = 5 * 60 * 1000
+
 function LoginPage() {
   const navigate = Route.useNavigate()
   const { isDarkMode, toggleTheme } = useTheme()
-  const { login } = useAuth()
+  const { login, error, clearError, isLoading: authLoading } = useAuth()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [attempts, setAttempts] = useState(0)
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const isLockedOut = lockoutUntil !== null && Date.now() < lockoutUntil
+
+  const getLockoutTimeRemaining = useCallback(() => {
+    if (!lockoutUntil) return 0
+    const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000)
+    return remaining > 0 ? remaining : 0
+  }, [lockoutUntil])
+
+  const handleLockout = useCallback(() => {
+    const newAttempts = attempts + 1
+    setAttempts(newAttempts)
+
+    if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
+      setLockoutUntil(Date.now() + LOCKOUT_DURATION_MS)
+      setAttempts(0)
+    }
+  }, [attempts])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (isLockedOut) return
+
     setLoading(true)
-    setError('')
-    // TODO: Implement login logic in task-ui-02
-    console.log('Login attempt:', { username, password })
-    login('dummy-token', { userId: 1, username, role: 'ADMIN' })
-    setLoading(false)
-    navigate({ to: '/dashboard' })
+    clearError()
+
+    try {
+      await login(username, password)
+      navigate({ to: '/dashboard' })
+    } catch {
+      handleLockout()
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -83,21 +112,29 @@ function LoginPage() {
               required
               autoComplete="username"
               autoFocus
+              disabled={isLockedOut || loading}
             />
             <TextField
               fullWidth
-              label="Contrasena"
+              label="Contraseña"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               margin="normal"
               required
               autoComplete="current-password"
+              disabled={isLockedOut || loading}
             />
 
-            {error && (
+            {isLockedOut && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                Demasiados intentos. Intente nuevamente en {getLockoutTimeRemaining()} segundos.
+              </Alert>
+            )}
+
+            {error && !isLockedOut && (
               <Alert severity="error" sx={{ mt: 2 }}>
-                {error}
+                {error.message}
               </Alert>
             )}
 
@@ -106,13 +143,13 @@ function LoginPage() {
               fullWidth
               variant="contained"
               size="large"
-              disabled={loading}
+              disabled={loading || authLoading || isLockedOut}
               sx={{ mt: 3, mb: 2 }}
             >
-              {loading ? (
+              {loading || authLoading ? (
                 <CircularProgress size={24} color="inherit" />
               ) : (
-                'Iniciar Sesion'
+                'Iniciar Sesión'
               )}
             </Button>
           </form>
