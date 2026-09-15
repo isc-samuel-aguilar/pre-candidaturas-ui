@@ -18,7 +18,7 @@ interface AuthContextType {
   isAuthenticated: boolean
   isLoading: boolean
   error: AuthError | null
-  login: (username: string, password: string) => Promise<void>
+  login: (username: string, password: string) => Promise<User>
   logout: () => void
   clearError: () => void
 }
@@ -65,30 +65,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
 
   const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<AuthError | null>(null)
 
   useEffect(() => {
-    if (token && !user) {
-      setIsLoading(true)
-      getCurrentUser(token)
-        .then((userData) => {
-          setUser(userData)
-        })
-        .catch((err) => {
-          if (isAuthError(err) && err.type === 'token') {
-            setToken(null)
-            removeSessionFromStorage()
-          }
-          setError(err as AuthError)
-        })
-        .finally(() => {
-          setIsLoading(false)
-        })
+    if (!token) {
+      setIsLoading(false)
+      return
     }
-  }, [token, user])
 
-  const login = useCallback(async (username: string, password: string) => {
+    let cancelled = false
+
+    getCurrentUser(token)
+      .then((userData) => {
+        if (!cancelled) setUser(userData)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        if (isAuthError(err) && err.type === 'token') {
+          setToken(null)
+          removeSessionFromStorage()
+        }
+        setError(err as AuthError)
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [token])
+
+  const login = useCallback(async (username: string, password: string): Promise<User> => {
     setIsLoading(true)
     setError(null)
 
@@ -99,11 +106,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const userData = await getCurrentUser(loginResponse.token)
       setUser(userData)
+      setIsLoading(false)
+      return userData
     } catch (err) {
       setError(err as AuthError)
-      throw err
-    } finally {
       setIsLoading(false)
+      throw err
     }
   }, [])
 

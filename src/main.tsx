@@ -8,6 +8,7 @@ import './index.css'
 
 export interface RouterAuth {
   isAuthenticated: boolean
+  user: { userId: number; username: string; role: string } | null
 }
 
 export interface RouterContext {

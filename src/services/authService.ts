@@ -1,10 +1,5 @@
 import { authClient, type ApiError } from './apiClient'
 
-export interface LoginRequest {
-  username: string
-  password: string
-}
-
 export interface LoginResponse {
   token: string
 }
@@ -46,8 +41,11 @@ export async function login(username: string, password: string): Promise<LoginRe
   try {
     const response = await authClient.post<LoginResponse>(
       '/login',
-      { username, password } as LoginRequest,
-      { includeAuth: false }
+      undefined,
+      {
+        includeAuth: false,
+        queryParams: { username, password }
+      }
     )
     return response.data
   } catch (error) {

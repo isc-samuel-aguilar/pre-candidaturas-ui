@@ -13,6 +13,7 @@ export interface ApiError {
 interface RequestOptions extends Omit<RequestInit, 'method' | 'body'> {
   timeout?: number
   includeAuth?: boolean
+  queryParams?: Record<string, string>
 }
 
 class ApiClient {
@@ -45,8 +46,13 @@ class ApiClient {
     body?: unknown,
     options: RequestOptions = {}
   ): Promise<ApiResponse<T>> {
-    const { timeout = 10000, includeAuth = true, ...fetchOptions } = options
-    const url = `${this.baseUrl}${endpoint}`
+    const { timeout = 10000, includeAuth = true, queryParams, ...fetchOptions } = options
+    let url = `${this.baseUrl}${endpoint}`
+
+    if (queryParams) {
+      const params = new URLSearchParams(queryParams)
+      url += `?${params.toString()}`
+    }
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeout)

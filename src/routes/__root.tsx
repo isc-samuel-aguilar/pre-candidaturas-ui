@@ -4,7 +4,13 @@ import type { RouterContext } from '../main'
 export const Route = createRootRoute({
   beforeLoad: ({ context }) => {
     const { auth } = context as RouterContext
-    if (!auth.isAuthenticated && location.pathname !== '/login') {
+    const isLoginPage = location.pathname === '/login'
+
+    if (auth.isAuthenticated && isLoginPage) {
+      throw redirect({ to: '/dashboard' })
+    }
+
+    if (!auth.isAuthenticated && !isLoginPage) {
       throw redirect({ to: '/login' })
     }
   },

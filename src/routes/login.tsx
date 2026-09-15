@@ -11,7 +11,8 @@ export const Route = createFileRoute('/login')({
   beforeLoad: ({ context }) => {
     const { auth } = context as RouterContext
     if (auth.isAuthenticated) {
-      throw redirect({ to: '/dashboard' })
+      const defaultRoute = auth.user?.role === 'REGISTER' ? '/dashboard/excel' : '/dashboard'
+      throw redirect({ to: defaultRoute })
     }
   },
   component: LoginPage,
@@ -57,8 +58,9 @@ function LoginPage() {
     clearError()
 
     try {
-      await login(username, password)
-      navigate({ to: '/dashboard' })
+      const user = await login(username, password)
+      const defaultRoute = user.role === 'REGISTER' ? '/dashboard/excel' : '/dashboard'
+      navigate({ to: defaultRoute })
     } catch {
       handleLockout()
     } finally {
@@ -95,7 +97,7 @@ function LoginPage() {
             }}
           >
             <Typography variant="h4" component="h1" gutterBottom color="primary">
-              Precandidaturas PRD
+              Precandidaturas
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Ingrese sus credenciales para acceder
