@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Box, Card, CardContent, Typography, TextField, Button, Alert, CircularProgress, IconButton } from '@mui/material'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Brightness4Icon from '@mui/icons-material/Brightness4'
 import Brightness7Icon from '@mui/icons-material/Brightness7'
 import { useTheme } from '../contexts/ThemeContext'
@@ -24,14 +24,21 @@ const LOCKOUT_DURATION_MS = 5 * 60 * 1000
 function LoginPage() {
   const navigate = Route.useNavigate()
   const { isDarkMode, toggleTheme } = useTheme()
-  const { login, error, clearError, isLoading: authLoading } = useAuth()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
+  const { login, error, clearError, isLoading: authLoading, isAuthenticated, user } = useAuth()
+  const [username, setUsername] = useState('002AGS')
+  const [password, setPassword] = useState('Test_123')
   const [loading, setLoading] = useState(false)
   const [attempts, setAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
 
   const isLockedOut = lockoutUntil !== null && Date.now() < lockoutUntil
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const defaultRoute = user.role === 'REGISTER' ? '/dashboard/excel' : '/dashboard'
+      navigate({ to: defaultRoute })
+    }
+  }, [isAuthenticated, user, navigate])
 
   const getLockoutTimeRemaining = useCallback(() => {
     if (!lockoutUntil) return 0
@@ -58,9 +65,7 @@ function LoginPage() {
     clearError()
 
     try {
-      const user = await login(username, password)
-      const defaultRoute = user.role === 'REGISTER' ? '/dashboard/excel' : '/dashboard'
-      navigate({ to: defaultRoute })
+      await login(username, password)
     } catch {
       handleLockout()
     } finally {

@@ -4,11 +4,12 @@ import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import { resolve } from 'path'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     tanstackRouter({
       target: 'react',
       autoCodeSplitting: true,
+      routeFileIgnorePattern: 'components',
     }),
     react(),
   ],
@@ -27,4 +28,7 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     css: true,
   },
-})
+  optimizeDeps: {
+    cache: command === 'serve' ? false : true,
+  },
+}))
