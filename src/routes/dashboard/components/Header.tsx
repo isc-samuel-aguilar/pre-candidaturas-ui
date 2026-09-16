@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { Box, AppBar, Toolbar, Typography, Button } from '@mui/material'
-import { ThemeToggle } from './ThemeToggle'
+import { ThemeToggle } from '../../../components/ThemeToggle'
 
 interface NavItem {
   label: string

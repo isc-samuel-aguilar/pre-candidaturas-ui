@@ -1,10 +1,9 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { Box, Card, CardContent, Typography, TextField, Button, Alert, CircularProgress, IconButton } from '@mui/material'
+import { Box, Card, CardContent, Typography, TextField, Button, Alert, CircularProgress } from '@mui/material'
 import { useState, useCallback, useEffect } from 'react'
-import Brightness4Icon from '@mui/icons-material/Brightness4'
-import Brightness7Icon from '@mui/icons-material/Brightness7'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
+import { ThemeToggle } from '../components/ThemeToggle'
 import type { RouterContext } from '../main'
 
 export const Route = createFileRoute('/login')({
@@ -83,13 +82,9 @@ function LoginPage() {
         bgcolor: 'background.default',
       }}
     >
-      <IconButton
-        onClick={toggleTheme}
-        sx={{ position: 'absolute', top: 16, right: 16 }}
-        color="inherit"
-      >
-        {isDarkMode ? <Brightness7Icon /> : <Brightness4Icon />}
-      </IconButton>
+      <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
+        <ThemeToggle isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />
+      </Box>
 
       <Card sx={{ maxWidth: 400, width: '100%', mx: 2 }}>
         <CardContent sx={{ p: 4 }}>
