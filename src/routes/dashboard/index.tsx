@@ -9,10 +9,10 @@ function DashboardIndex() {
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
-        Consulta de Registros
+        Bienvenido
       </Typography>
       <Typography variant="body1" color="text.secondary">
-        Esta seccion se implementara en task-ui-05.
+        Seleccione una opción del menú superior para comenzar.
       </Typography>
     </Box>
   )

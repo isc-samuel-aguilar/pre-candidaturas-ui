@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import { login as authLogin, getCurrentUser, isAuthError, type AuthError } from '../services/authService'
+import { apiClient } from '../services/apiClient'
 
 interface User {
   userId: number
@@ -69,6 +70,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<AuthError | null>(null)
 
   useEffect(() => {
+    apiClient.setToken(token)
+  }, [token])
+
+  useEffect(() => {
     if (!token) {
       setIsLoading(false)
       return
@@ -120,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setError(null)
     removeSessionFromStorage()
+    apiClient.setToken(null)
   }, [])
 
   const clearError = useCallback(() => {

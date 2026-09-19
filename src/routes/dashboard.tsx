@@ -11,7 +11,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Registrar', to: '/dashboard', roles: ['ADMIN', 'REGISTER'] },
+  { label: 'Captura de Folio', to: '/dashboard/folios', roles: ['ADMIN'] },
   { label: 'Registrar con Excel', to: '/dashboard/excel', roles: ['ADMIN', 'REGISTER'] },
   { label: 'Consultar', to: '/dashboard', roles: ['ADMIN', 'REGISTER'] },
 ]

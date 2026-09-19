@@ -10,7 +10,7 @@ export const Route = createFileRoute('/login')({
   beforeLoad: ({ context }) => {
     const { auth } = context as RouterContext
     if (auth.isAuthenticated) {
-      const defaultRoute = auth.user?.role === 'REGISTER' ? '/dashboard/excel' : '/dashboard'
+      const defaultRoute = auth.user?.role === 'REGISTER' ? '/dashboard/excel' : '/dashboard/folios'
       throw redirect({ to: defaultRoute })
     }
   },
@@ -24,8 +24,8 @@ function LoginPage() {
   const navigate = Route.useNavigate()
   const { isDarkMode, toggleTheme } = useTheme()
   const { login, error, clearError, isLoading: authLoading, isAuthenticated, user } = useAuth()
-  const [username, setUsername] = useState('002AGS')
-  const [password, setPassword] = useState('Test_123')
+  const [username, setUsername] = useState('admin')
+  const [password, setPassword] = useState('adminPassword')
   const [loading, setLoading] = useState(false)
   const [attempts, setAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
@@ -34,7 +34,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      const defaultRoute = user.role === 'REGISTER' ? '/dashboard/excel' : '/dashboard'
+      const defaultRoute = user.role === 'REGISTER' ? '/dashboard/excel' : '/dashboard/folios'
       navigate({ to: defaultRoute })
     }
   }, [isAuthenticated, user, navigate])
