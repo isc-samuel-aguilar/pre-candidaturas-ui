@@ -19,6 +19,7 @@ interface RequestOptions extends Omit<RequestInit, 'method' | 'body'> {
 class ApiClient {
   private baseUrl: string
   private token: string | null = null
+  private onUnauthorized: (() => void) | null = null
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
@@ -26,6 +27,10 @@ class ApiClient {
 
   setToken(token: string | null) {
     this.token = token
+  }
+
+  setOnUnauthorized(callback: (() => void) | null) {
+    this.onUnauthorized = callback
   }
 
   private getHeaders(includeAuth: boolean = true): HeadersInit {
@@ -58,10 +63,13 @@ class ApiClient {
     const timeoutId = setTimeout(() => controller.abort(), timeout)
 
     try {
+      const isFormData = body instanceof FormData
       const response = await fetch(url, {
         method,
-        headers: this.getHeaders(includeAuth),
-        body: body ? JSON.stringify(body) : undefined,
+        headers: isFormData
+          ? { Authorization: `Bearer ${this.token}` }
+          : this.getHeaders(includeAuth),
+        body: isFormData ? body : body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
         ...fetchOptions,
       })
@@ -75,6 +83,9 @@ class ApiClient {
       }
 
       if (!response.ok) {
+        if (response.status === 401) {
+          this.onUnauthorized?.()
+        }
         const errorData = data as ApiError | undefined
         throw {
           message: errorData?.message || `Error ${response.status}`,

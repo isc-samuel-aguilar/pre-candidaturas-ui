@@ -74,6 +74,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token])
 
   useEffect(() => {
+    const handleUnauthorized = () => {
+      setToken(null)
+      setUser(null)
+      setError(null)
+      removeSessionFromStorage()
+      apiClient.setToken(null)
+    }
+
+    apiClient.setOnUnauthorized(handleUnauthorized)
+    return () => apiClient.setOnUnauthorized(null)
+  }, [])
+
+  useEffect(() => {
     if (!token) {
       setIsLoading(false)
       return
