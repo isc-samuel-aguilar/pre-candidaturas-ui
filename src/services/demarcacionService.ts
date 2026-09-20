@@ -2,6 +2,7 @@ import { apiClient, type ApiError } from './apiClient'
 import type {
   DemarcacionCatalogo,
   FolioDemarcacion,
+  Precandidato,
   ExcelImportResult,
 } from '../types/demarcacion'
 import type { Folio } from '../types/folio'
@@ -112,4 +113,18 @@ export async function uploadExcel(
     { timeout: 30000 }
   )
   return response.data
+}
+
+export async function getPrecandidatos(
+  folioId: number,
+  demarcacionName: string
+): Promise<Precandidato[]> {
+  try {
+    const response = await apiClient.get<Precandidato[]>(
+      `/folios/${folioId}/demarcaciones/${demarcacionName}/precandidatos`
+    )
+    return response.data
+  } catch (error) {
+    throw mapApiError(error as ApiError)
+  }
 }

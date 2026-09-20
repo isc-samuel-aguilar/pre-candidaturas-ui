@@ -31,6 +31,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import PeopleIcon from '@mui/icons-material/People'
 import { useNavigate } from '@tanstack/react-router'
 import type { DemarcacionRow, DemarcacionStatus } from '../../../../types/demarcacion'
+import { PrecandidatosTable } from '../../../../components/PrecandidatosTable'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos' },
@@ -194,6 +195,7 @@ export function DemarcacionTable({
               <TableCell padding="checkbox" />
               <TableCell>Demarcación</TableCell>
               <TableCell align="center">Pre Candidatos</TableCell>
+              <TableCell align="center" sx={{ minWidth: 50 }}>Núm.</TableCell>
               <TableCell align="center">Subir</TableCell>
               <TableCell align="center">Eliminar</TableCell>
               <TableCell align="center">Status</TableCell>
@@ -234,13 +236,18 @@ export function DemarcacionTable({
                         onClick={() => {
                           if (row.folioDemarcacion) {
                             navigate({
-                              to: '/dashboard/documentos/' + row.folioDemarcacion.id,
+                              to: '/dashboard/demarcaciones/' + row.folioDemarcacion.id,
                             })
                           }
                         }}
                       >
                         Pre Candidatos
                       </Button>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Typography variant="body2">
+                        {row.precandidatoCount ?? '-'}
+                      </Typography>
                     </TableCell>
                     <TableCell align="center">
                       <input
@@ -295,10 +302,18 @@ export function DemarcacionTable({
                   </TableRow>
                   {isExpanded && (
                     <TableRow key={`${row.catalogo.id}-expanded`}>
-                      <TableCell colSpan={6} sx={{ py: 2, backgroundColor: '#f5f5f5' }}>
-                        <Typography variant="body2" color="text.secondary">
-                          Contenido de pre candidatos pendiente de implementación
-                        </Typography>
+                      <TableCell colSpan={7} sx={{ p: 0, backgroundColor: '#f5f5f5' }}>
+                        {row.folioDemarcacion ? (
+                          <PrecandidatosTable
+                            folioId={row.folioDemarcacion.folioId}
+                            demarcacionName={row.catalogo.demarcacion}
+                            mode="excel"
+                          />
+                        ) : (
+                          <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+                            No hay datos disponibles para esta demarcación
+                          </Typography>
+                        )}
                       </TableCell>
                     </TableRow>
                   )}

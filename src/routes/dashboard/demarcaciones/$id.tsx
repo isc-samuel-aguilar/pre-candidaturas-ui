@@ -7,16 +7,11 @@ import {
   Chip,
   Button,
   CircularProgress,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { getMyFolio, getDemarcacionById } from '../../../services/demarcacionService'
 import type { FolioDemarcacion } from '../../../types/demarcacion'
+import { PrecandidatosTable } from '../../../components/PrecandidatosTable'
 
 export const Route = createFileRoute('/dashboard/demarcaciones/$id')({
   component: DemarcacionDetailPage,
@@ -27,6 +22,7 @@ function DemarcacionDetailPage() {
   const [demarcacion, setDemarcacion] = useState<FolioDemarcacion | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [precandidatoCount, setPrecandidatoCount] = useState<number | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -105,33 +101,29 @@ function DemarcacionDetailPage() {
         Volver
       </Button>
 
-      <Typography variant="h5" gutterBottom>
-        Detalle de Demarcación
-      </Typography>
-
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
           <Box>
-            <Typography variant="subtitle2" color="text.secondary">
-              Ámbito
+            <Typography variant="subtitle2" color="text.secondary" component="span">
+              Ámbito:{' '}
             </Typography>
-            <Typography variant="body1">{demarcacion.ambito}</Typography>
+            <Typography variant="body2" component="span">{demarcacion.ambito}</Typography>
           </Box>
           <Box>
-            <Typography variant="subtitle2" color="text.secondary">
-              Demarcación
+            <Typography variant="subtitle2" color="text.secondary" component="span">
+              Demarcación:{' '}
             </Typography>
-            <Typography variant="body1">{demarcacion.demarcacion}</Typography>
+            <Typography variant="body2" component="span">{demarcacion.demarcacion}</Typography>
           </Box>
           <Box>
-            <Typography variant="subtitle2" color="text.secondary">
-              Alias
+            <Typography variant="subtitle2" color="text.secondary" component="span">
+              Alias:{' '}
             </Typography>
-            <Typography variant="body1">{demarcacion.alias || 'N/A'}</Typography>
+            <Typography variant="body2" component="span">{demarcacion.alias || 'N/A'}</Typography>
           </Box>
-          <Box>
-            <Typography variant="subtitle2" color="text.secondary">
-              Status
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Typography variant="subtitle2" color="text.secondary" component="span">
+              Status:{' '}
             </Typography>
             <Chip
               label={getStatusLabel(demarcacion.status)}
@@ -140,18 +132,18 @@ function DemarcacionDetailPage() {
             />
           </Box>
           <Box>
-            <Typography variant="subtitle2" color="text.secondary">
-              Descripción de Status
+            <Typography variant="subtitle2" color="text.secondary" component="span">
+              Descripción:{' '}
             </Typography>
-            <Typography variant="body1">
+            <Typography variant="body2" component="span">
               {demarcacion.statusDescription || 'N/A'}
             </Typography>
           </Box>
           <Box>
-            <Typography variant="subtitle2" color="text.secondary">
-              Fecha de Creación
+            <Typography variant="subtitle2" color="text.secondary" component="span">
+              Creación:{' '}
             </Typography>
-            <Typography variant="body1">
+            <Typography variant="body2" component="span">
               {new Date(demarcacion.createdDate).toLocaleDateString('es-MX')}
             </Typography>
           </Box>
@@ -159,31 +151,16 @@ function DemarcacionDetailPage() {
       </Paper>
 
       <Typography variant="h6" gutterBottom>
-        Precandidatos
+        Precandidatos{precandidatoCount !== null ? ` (${precandidatoCount})` : ''}
       </Typography>
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Apellido Paterno</TableCell>
-              <TableCell>Apellido Materno</TableCell>
-              <TableCell>Nombre</TableCell>
-              <TableCell>Clave INE</TableCell>
-              <TableCell>CURP</TableCell>
-              <TableCell>Status</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            <TableRow>
-              <TableCell colSpan={6} align="center">
-                <Typography variant="body2" color="text.secondary">
-                  Los precandidatos se mostrarán aquí cuando se carguen
-                </Typography>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </TableContainer>
+
+      <PrecandidatosTable
+        folioId={demarcacion.folioId}
+        demarcacionName={demarcacion.demarcacion}
+        mode="detail"
+        demarcacionStatus={demarcacion.status}
+        onCountChange={setPrecandidatoCount}
+      />
     </Box>
   )
 }

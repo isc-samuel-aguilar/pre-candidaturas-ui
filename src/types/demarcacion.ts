@@ -24,6 +24,7 @@ export interface DemarcacionRow {
   catalogo: DemarcacionCatalogo
   folioDemarcacion: FolioDemarcacion | null
   status: DemarcacionStatus
+  precandidatoCount?: number
 }
 
 export interface DemarcacionDetail {
@@ -39,17 +40,39 @@ export interface DemarcacionDetail {
 }
 
 export interface Precandidato {
-  id: number
-  folioDemarcacionId: number
+  id?: number
+  folioDemarcacionId?: number
+  cargo: string
+  calidad: string
+  genero: string
+  accionAfirmativa: string
+  internoExterno: string
   apellidoPaterno: string
   apellidoMaterno: string
   nombre: string
   claveIfe: string
+  ocr: string
   curp: string
-  cargo: string
-  status: string
-  createdBy: string
-  createdDate: string
+  rfcHomoclave: string
+  municipioDondeNacio: string
+  estadoDondeNacio: string
+  ocupacion: string
+  calleDondeVive: string
+  numeroDondeVive: string
+  coloniaDondeVive: string
+  municipioDondeVive: string
+  estadoDondeVive: string
+  codigoPostal: string
+  tiempoDeResidenciaEnDomicilio: string
+  telefono: string
+  correoElectronico: string
+  escolaridad: string
+  carrera: string
+  lugarDondeTrabaja: string
+  puestoEnSuTrabajo: string
+  fechaIngresoTrabajo: string
+  fechaTerminacionTrabajo: string
+  status?: string
 }
 
 export interface ExcelImportResult {
