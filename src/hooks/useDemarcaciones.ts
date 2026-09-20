@@ -14,7 +14,6 @@ import {
   createDemarcacion,
   deleteDemarcacion,
   uploadExcel,
-  getPrecandidatos,
 } from '../services/demarcacionService'
 
 export function useDemarcaciones() {
@@ -24,13 +23,11 @@ export function useDemarcaciones() {
   const [loading, setLoading] = useState(false)
   const [uploadingIds, setUploadingIds] = useState<Set<number>>(new Set())
   const [error, setError] = useState<DemarcacionError | null>(null)
-  const [precandidatosCounts, setPrecandidatosCounts] = useState<Map<string, number>>(new Map())
 
   const mergeDemarcaciones = useCallback(
     (
       catalogoList: DemarcacionCatalogo[],
-      folioList: FolioDemarcacion[],
-      counts: Map<string, number>
+      folioList: FolioDemarcacion[]
     ): DemarcacionRow[] => {
       return catalogoList.map((cat) => {
         const fd = folioList.find(
@@ -42,7 +39,6 @@ export function useDemarcaciones() {
           catalogo: cat,
           folioDemarcacion: fd || null,
           status: fd?.status || null,
-          precandidatoCount: counts.get(cat.demarcacion),
         }
       })
     },
@@ -65,19 +61,6 @@ export function useDemarcaciones() {
       if (folioData.id) {
         const fdData = await getDemarcacionesByFolio(folioData.id)
         setFolioDemarcaciones(fdData)
-
-        const counts = new Map<string, number>()
-        await Promise.all(
-          fdData.map(async (fd) => {
-            try {
-              const precandidatos = await getPrecandidatos(folioData.id, fd.demarcacion)
-              counts.set(fd.demarcacion, precandidatos.length)
-            } catch {
-              counts.set(fd.demarcacion, 0)
-            }
-          })
-        )
-        setPrecandidatosCounts(counts)
       }
     } catch (err) {
       setError(err as DemarcacionError)
@@ -135,7 +118,7 @@ export function useDemarcaciones() {
     [folio]
   )
 
-  const demarcaciones = mergeDemarcaciones(catalogo, folioDemarcaciones, precandidatosCounts)
+  const demarcaciones = mergeDemarcaciones(catalogo, folioDemarcaciones)
 
   const getStatusColor = (status: DemarcacionStatus) => {
     switch (status) {

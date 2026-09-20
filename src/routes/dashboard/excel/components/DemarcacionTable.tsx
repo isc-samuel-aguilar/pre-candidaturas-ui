@@ -195,7 +195,6 @@ export function DemarcacionTable({
               <TableCell padding="checkbox" />
               <TableCell>Demarcación</TableCell>
               <TableCell align="center">Pre Candidatos</TableCell>
-              <TableCell align="center" sx={{ minWidth: 50 }}>Núm.</TableCell>
               <TableCell align="center">Subir</TableCell>
               <TableCell align="center">Eliminar</TableCell>
               <TableCell align="center">Status</TableCell>
@@ -245,11 +244,6 @@ export function DemarcacionTable({
                       </Button>
                     </TableCell>
                     <TableCell align="center">
-                      <Typography variant="body2">
-                        {row.precandidatoCount ?? '-'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center">
                       <input
                         type="file"
                         accept=".xlsx,.xls"
@@ -266,7 +260,7 @@ export function DemarcacionTable({
                           isUploading ? <CircularProgress size={16} /> : <CloudUploadIcon />
                         }
                         onClick={() => fileInputRefs.current.get(row.catalogo.id)?.click()}
-                        disabled={isUploading}
+                        disabled={isUploading || hasStatus}
                       >
                         Subir
                       </Button>
@@ -302,7 +296,7 @@ export function DemarcacionTable({
                   </TableRow>
                   {isExpanded && (
                     <TableRow key={`${row.catalogo.id}-expanded`}>
-                      <TableCell colSpan={7} sx={{ p: 0, backgroundColor: '#f5f5f5' }}>
+                      <TableCell colSpan={6} sx={{ p: 0, backgroundColor: '#f5f5f5' }}>
                         {row.folioDemarcacion ? (
                           <PrecandidatosTable
                             folioId={row.folioDemarcacion.folioId}

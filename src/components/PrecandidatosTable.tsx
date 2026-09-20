@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Typography,
@@ -14,17 +14,22 @@ import {
   Chip,
   Collapse,
   IconButton,
+  List,
+  ListItem,
+  ListItemText,
 } from '@mui/material'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
 import DescriptionIcon from '@mui/icons-material/Description'
 import { getPrecandidatos } from '../services/demarcacionService'
-import type { Precandidato, DemarcacionStatus } from '../types/demarcacion'
+import { getDocumentsByPrecandidato } from '../services/documentService'
+import type { Precandidato, DemarcacionStatus, Documento } from '../types/demarcacion'
 
 interface PrecandidatosTableProps {
   folioId: number
   demarcacionName: string
   mode?: 'excel' | 'detail'
+  autoLoad?: boolean
   demarcacionStatus?: DemarcacionStatus
   onCountChange?: (count: number) => void
 }
@@ -55,50 +60,95 @@ function getStatusColor(status?: string | null) {
   }
 }
 
+function getDocStatusLabel(status?: string | null) {
+  switch (status) {
+    case 'POR_VALIDAR':
+      return 'Por Validar'
+    case 'VALIDO':
+      return 'Válido'
+    case 'ERROR':
+      return 'Error'
+    default:
+      return 'Por Validar'
+  }
+}
+
+function getDocStatusColor(status?: string | null) {
+  switch (status) {
+    case 'POR_VALIDAR':
+      return { bg: '#FFD100', color: '#000000' }
+    case 'VALIDO':
+      return { bg: '#4CAF50', color: '#FFFFFF' }
+    case 'ERROR':
+      return { bg: '#F44336', color: '#FFFFFF' }
+    default:
+      return { bg: '#FFD100', color: '#000000' }
+  }
+}
+
 export function PrecandidatosTable({
   folioId,
   demarcacionName,
   mode = 'excel',
-  demarcacionStatus,
+  autoLoad = true,
   onCountChange,
 }: PrecandidatosTableProps) {
   const [precandidatos, setPrecandidatos] = useState<Precandidato[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(autoLoad)
   const [error, setError] = useState<string | null>(null)
   const [expandedDocs, setExpandedDocs] = useState<Set<number>>(new Set())
+  const [documentsMap, setDocumentsMap] = useState<Map<number, Documento[]>>(new Map())
+  const [loadingDocs, setLoadingDocs] = useState<Set<number>>(new Set())
+
+  const fetchPrecandidatos = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await getPrecandidatos(folioId, demarcacionName)
+      setPrecandidatos(data)
+      onCountChange?.(data.length)
+    } catch {
+      setError('Error al cargar los precandidatos')
+    } finally {
+      setLoading(false)
+    }
+  }, [folioId, demarcacionName, onCountChange])
 
   useEffect(() => {
-    const fetchPrecandidatos = async () => {
-      setLoading(true)
-      setError(null)
-
-      try {
-        const data = await getPrecandidatos(folioId, demarcacionName)
-        setPrecandidatos(data)
-        onCountChange?.(data.length)
-      } catch {
-        setError('Error al cargar los precandidatos')
-      } finally {
-        setLoading(false)
-      }
+    if (autoLoad) {
+      fetchPrecandidatos()
     }
-
-    fetchPrecandidatos()
-  }, [folioId, demarcacionName])
+  }, [autoLoad, fetchPrecandidatos])
 
   const formatFullName = (p: Precandidato) =>
     `${p.apellidoPaterno} ${p.apellidoMaterno} ${p.nombre}`.trim()
 
-  const handleToggleDocs = (precandidatoId: number) => {
+  const handleTogglePrecandidato = async (precandidatoId: number) => {
     setExpandedDocs((prev) => {
       const next = new Set(prev)
       if (next.has(precandidatoId)) {
         next.delete(precandidatoId)
-      } else {
-        next.add(precandidatoId)
+        return next
       }
+      next.add(precandidatoId)
       return next
     })
+
+    if (!documentsMap.has(precandidatoId) && !loadingDocs.has(precandidatoId)) {
+      setLoadingDocs((prev) => new Set(prev).add(precandidatoId))
+      try {
+        const docs = await getDocumentsByPrecandidato(precandidatoId)
+        setDocumentsMap((prev) => new Map(prev).set(precandidatoId, docs))
+      } catch {
+        setDocumentsMap((prev) => new Map(prev).set(precandidatoId, []))
+      } finally {
+        setLoadingDocs((prev) => {
+          const next = new Set(prev)
+          next.delete(precandidatoId)
+          return next
+        })
+      }
+    }
   }
 
   if (loading) {
@@ -130,7 +180,6 @@ export function PrecandidatosTable({
   }
 
   const isDetailMode = mode === 'detail'
-  const docsEnabled = demarcacionStatus === 'VALIDO'
 
   return (
     <Box sx={{ p: 2 }}>
@@ -138,8 +187,8 @@ export function PrecandidatosTable({
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
-              {isDetailMode && <TableCell padding="checkbox" />}
-              {isDetailMode && <TableCell>Documentos</TableCell>}
+              <TableCell padding="checkbox" />
+              <TableCell>Documentos</TableCell>
               <TableCell align="center">Status</TableCell>
               <TableCell>Nombre Completo</TableCell>
               <TableCell>Cargo</TableCell>
@@ -180,35 +229,34 @@ export function PrecandidatosTable({
               const precandidatoId = p.id || index
               const isDocsExpanded = expandedDocs.has(precandidatoId)
               const statusColors = getStatusColor(p.status)
+              const isDocsEnabled = p.status === 'VALIDO'
 
               return (
                 <TableRow key={precandidatoId} hover>
-                  {isDetailMode && (
-                    <TableCell padding="checkbox">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleToggleDocs(precandidatoId)}
-                      >
-                        {isDocsExpanded ? (
-                          <KeyboardArrowDownIcon />
-                        ) : (
-                          <KeyboardArrowRightIcon />
-                        )}
-                      </IconButton>
-                    </TableCell>
-                  )}
-                  {isDetailMode && (
-                    <TableCell>
-                      <Button
-                        size="small"
-                        startIcon={<DescriptionIcon />}
-                        disabled={!docsEnabled}
-                        sx={{ textTransform: 'none' }}
-                      >
-                        Documentos
-                      </Button>
-                    </TableCell>
-                  )}
+                  <TableCell padding="checkbox">
+                    <IconButton
+                      size="small"
+                      disabled={!isDocsEnabled}
+                      onClick={() => isDocsEnabled && handleTogglePrecandidato(precandidatoId)}
+                    >
+                      {isDocsExpanded ? (
+                        <KeyboardArrowDownIcon />
+                      ) : (
+                        <KeyboardArrowRightIcon />
+                      )}
+                    </IconButton>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="small"
+                      startIcon={<DescriptionIcon />}
+                      disabled={!isDocsEnabled}
+                      onClick={() => isDocsEnabled && handleTogglePrecandidato(precandidatoId)}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Documentos
+                    </Button>
+                  </TableCell>
                   <TableCell align="center">
                     <Chip
                       label={getStatusLabel(p.status)}
@@ -250,7 +298,6 @@ export function PrecandidatosTable({
                       <TableCell>{p.fechaTerminacionTrabajo}</TableCell>
                     </>
                   )}
-                  {isDetailMode && <TableCell>{p.ocr}</TableCell>}
                   <TableCell>{p.telefono}</TableCell>
                   <TableCell>{p.correoElectronico}</TableCell>
                 </TableRow>
@@ -260,16 +307,55 @@ export function PrecandidatosTable({
         </Table>
       </TableContainer>
 
-      {isDetailMode && precandidatos.map((p, index) => {
+      {precandidatos.map((p, index) => {
         const precandidatoId = p.id || index
         const isDocsExpanded = expandedDocs.has(precandidatoId)
+        const docs = documentsMap.get(precandidatoId)
+        const isLoadingDocs = loadingDocs.has(precandidatoId)
 
         return (
           <Collapse key={`docs-${precandidatoId}`} in={isDocsExpanded}>
-            <Box sx={{ py: 1, pl: 4, backgroundColor: '#f5f5f5', borderRadius: 1, mt: 0.5 }}>
-              <Typography variant="body2" color="text.secondary">
-                Documentos - Próximamente
-              </Typography>
+            <Box sx={{ py: 1, pl: 4, pr: 2, backgroundColor: '#f5f5f5', borderRadius: 1, mt: 0.5, mb: 1 }}>
+              {isLoadingDocs ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              ) : docs && docs.length > 0 ? (
+                <List dense disablePadding>
+                  {docs.map((doc) => {
+                    const docColors = getDocStatusColor(doc.status)
+                    return (
+                      <ListItem key={doc.id} disablePadding sx={{ py: 0.5 }}>
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                {doc.name}
+                              </Typography>
+                              <Chip
+                                label={getDocStatusLabel(doc.status)}
+                                size="small"
+                                sx={{
+                                  backgroundColor: docColors.bg,
+                                  color: docColors.color,
+                                  fontWeight: 500,
+                                  height: 20,
+                                  fontSize: '0.7rem',
+                                }}
+                              />
+                            </Box>
+                          }
+                          secondary={doc.description}
+                        />
+                      </ListItem>
+                    )
+                  })}
+                </List>
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                  No hay documentos registrados
+                </Typography>
+              )}
             </Box>
           </Collapse>
         )

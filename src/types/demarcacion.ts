@@ -24,7 +24,6 @@ export interface DemarcacionRow {
   catalogo: DemarcacionCatalogo
   folioDemarcacion: FolioDemarcacion | null
   status: DemarcacionStatus
-  precandidatoCount?: number
 }
 
 export interface DemarcacionDetail {
@@ -73,6 +72,15 @@ export interface Precandidato {
   fechaIngresoTrabajo: string
   fechaTerminacionTrabajo: string
   status?: string
+}
+
+export interface Documento {
+  id: number
+  name: string
+  description: string
+  status: string
+  preCandidatoId: number
+  createdDate: string
 }
 
 export interface ExcelImportResult {
