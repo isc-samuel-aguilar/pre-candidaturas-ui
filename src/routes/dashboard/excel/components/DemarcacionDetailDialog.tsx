@@ -9,6 +9,7 @@ import {
   Chip,
 } from '@mui/material'
 import type { DemarcacionRow } from '../../../../types/demarcacion'
+import { StatusEnum } from '../../../../types/enums'
 
 interface DemarcacionDetailDialogProps {
   open: boolean
@@ -25,11 +26,11 @@ export function DemarcacionDetailDialog({
 
   const getStatusLabel = (status: string | null) => {
     switch (status) {
-      case 'POR_VALIDAR':
+      case StatusEnum.POR_VALIDAR:
         return 'Por Validar'
-      case 'VALIDO':
+      case StatusEnum.VALIDO:
         return 'Válido'
-      case 'ERROR':
+      case StatusEnum.ERROR:
         return 'Error'
       default:
         return 'Sin cargar'
@@ -38,11 +39,11 @@ export function DemarcacionDetailDialog({
 
   const getStatusColor = (status: string | null) => {
     switch (status) {
-      case 'POR_VALIDAR':
+      case StatusEnum.POR_VALIDAR:
         return 'warning'
-      case 'VALIDO':
+      case StatusEnum.VALIDO:
         return 'success'
-      case 'ERROR':
+      case StatusEnum.ERROR:
         return 'error'
       default:
         return 'default'

@@ -31,14 +31,15 @@ import SearchIcon from '@mui/icons-material/Search'
 import PeopleIcon from '@mui/icons-material/People'
 import { useNavigate } from '@tanstack/react-router'
 import type { DemarcacionRow, DemarcacionStatus } from '../../../../types/demarcacion'
+import { StatusEnum } from '../../../../types/enums'
 import { PrecandidatosTable } from '../../../../components/PrecandidatosTable'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos' },
   { value: '__null__', label: 'Sin Cargar' },
-  { value: 'POR_VALIDAR', label: 'Por Validar' },
-  { value: 'VALIDO', label: 'Válido' },
-  { value: 'ERROR', label: 'Error' },
+  { value: StatusEnum.POR_VALIDAR, label: 'Por Validar' },
+  { value: StatusEnum.VALIDO, label: 'Válido' },
+  { value: StatusEnum.ERROR, label: 'Error' },
 ]
 
 interface DemarcacionTableProps {
@@ -136,11 +137,11 @@ export function DemarcacionTable({
 
   const getStatusLabel = (status: DemarcacionStatus) => {
     switch (status) {
-      case 'POR_VALIDAR':
+      case StatusEnum.POR_VALIDAR:
         return 'Por Validar'
-      case 'VALIDO':
+      case StatusEnum.VALIDO:
         return 'Válido'
-      case 'ERROR':
+      case StatusEnum.ERROR:
         return 'Error'
       default:
         return 'Sin cargar'
@@ -302,6 +303,7 @@ export function DemarcacionTable({
                             folioId={row.folioDemarcacion.folioId}
                             demarcacionName={row.catalogo.demarcacion}
                             mode="excel"
+                            demarcacionStatus={row.status}
                           />
                         ) : (
                           <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>

@@ -1,6 +1,7 @@
 import { Box, Typography, Chip } from '@mui/material'
 import type { Folio } from '../../../../types/folio'
 import type { DemarcacionRow } from '../../../../types/demarcacion'
+import { StatusEnum } from '../../../../types/enums'
 
 interface FolioSectionProps {
   folio: Folio | null
@@ -10,9 +11,9 @@ interface FolioSectionProps {
 
 export function FolioSection({ folio, demarcaciones, loading }: FolioSectionProps) {
   const cargados = demarcaciones.filter((d) => d.status !== null).length
-  const porValidar = demarcaciones.filter((d) => d.status === 'POR_VALIDAR').length
-  const validos = demarcaciones.filter((d) => d.status === 'VALIDO').length
-  const erroneos = demarcaciones.filter((d) => d.status === 'ERROR').length
+  const porValidar = demarcaciones.filter((d) => d.status === StatusEnum.POR_VALIDAR).length
+  const validos = demarcaciones.filter((d) => d.status === StatusEnum.VALIDO).length
+  const erroneos = demarcaciones.filter((d) => d.status === StatusEnum.ERROR).length
 
   return (
     <Box

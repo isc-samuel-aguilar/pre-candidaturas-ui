@@ -1,11 +1,13 @@
+import type { StatusEnum } from './enums'
+
+export type DemarcacionStatus = StatusEnum | null
+
 export interface DemarcacionCatalogo {
   id: number
   ambito: string
   demarcacion: string
   alias: string | null
 }
-
-export type DemarcacionStatus = 'POR_VALIDAR' | 'VALIDO' | 'ERROR' | null
 
 export interface FolioDemarcacion {
   id: number
@@ -71,15 +73,27 @@ export interface Precandidato {
   puestoEnSuTrabajo: string
   fechaIngresoTrabajo: string
   fechaTerminacionTrabajo: string
-  status?: string
 }
 
 export interface Documento {
   id: number
-  name: string
-  description: string
-  status: string
+  catalogId: number
+  catalogKey: string
+  catalogValue: string
+  catalogDescription: string
+  status: StatusEnum | null
+  bucketName: string | null
+  objectKey: string | null
   preCandidatoId: number
+  createdDate: string
+}
+
+export interface CatalogKeyValue {
+  id: number
+  key: string
+  value: string
+  type: string
+  description: string
   createdDate: string
 }
 

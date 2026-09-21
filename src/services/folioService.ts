@@ -23,7 +23,7 @@ function mapApiError(error: ApiError): FolioError {
 export async function getRepresentations(): Promise<Configuration[]> {
   try {
     const response = await apiClient.get<Configuration[]>(
-      '/configurations/representations'
+      '/catalogs/key/REPRESENTACION'
     )
     return response.data
   } catch (error) {

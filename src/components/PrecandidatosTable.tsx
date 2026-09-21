@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Box,
   Typography,
@@ -12,18 +12,27 @@ import {
   TableRow,
   Button,
   Chip,
-  Collapse,
   IconButton,
-  List,
-  ListItem,
-  ListItemText,
 } from '@mui/material'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
-import DescriptionIcon from '@mui/icons-material/Description'
+import CloudUploadIcon from '@mui/icons-material/CloudUpload'
+import DeleteIcon from '@mui/icons-material/Delete'
 import { getPrecandidatos } from '../services/demarcacionService'
-import { getDocumentsByPrecandidato } from '../services/documentService'
-import type { Precandidato, DemarcacionStatus, Documento } from '../types/demarcacion'
+import {
+  getDocumentsByPrecandidato,
+  getDocumentTypes,
+  uploadDocument,
+  deleteDocument,
+  getDocumentUrl,
+} from '../services/documentService'
+import type { Precandidato, DemarcacionStatus, Documento, CatalogKeyValue } from '../types/demarcacion'
+import { StatusEnum } from '../types/enums'
+
+interface DocumentRow {
+  catalogType: string
+  document: Documento | null
+}
 
 interface PrecandidatosTableProps {
   folioId: number
@@ -34,56 +43,37 @@ interface PrecandidatosTableProps {
   onCountChange?: (count: number) => void
 }
 
-function getStatusLabel(status?: string | null) {
+function getStatusLabel(status?: StatusEnum | null) {
   switch (status) {
-    case 'POR_VALIDAR':
+    case StatusEnum.POR_VALIDAR:
       return 'Por Validar'
-    case 'VALIDO':
+    case StatusEnum.VALIDO:
       return 'Válido'
-    case 'ERROR':
+    case StatusEnum.ERROR:
       return 'Error'
     default:
       return 'Por Validar'
   }
 }
 
-function getStatusColor(status?: string | null) {
+function getStatusColor(status?: StatusEnum | null) {
   switch (status) {
-    case 'POR_VALIDAR':
+    case StatusEnum.POR_VALIDAR:
       return { bg: '#FFD100', color: '#000000' }
-    case 'VALIDO':
+    case StatusEnum.VALIDO:
       return { bg: '#4CAF50', color: '#FFFFFF' }
-    case 'ERROR':
+    case StatusEnum.ERROR:
       return { bg: '#F44336', color: '#FFFFFF' }
     default:
       return { bg: '#FFD100', color: '#000000' }
   }
 }
 
-function getDocStatusLabel(status?: string | null) {
-  switch (status) {
-    case 'POR_VALIDAR':
-      return 'Por Validar'
-    case 'VALIDO':
-      return 'Válido'
-    case 'ERROR':
-      return 'Error'
-    default:
-      return 'Por Validar'
-  }
-}
-
-function getDocStatusColor(status?: string | null) {
-  switch (status) {
-    case 'POR_VALIDAR':
-      return { bg: '#FFD100', color: '#000000' }
-    case 'VALIDO':
-      return { bg: '#4CAF50', color: '#FFFFFF' }
-    case 'ERROR':
-      return { bg: '#F44336', color: '#FFFFFF' }
-    default:
-      return { bg: '#FFD100', color: '#000000' }
-  }
+function mergeDocs(documentTypes: CatalogKeyValue[], existingDocs: Documento[]): DocumentRow[] {
+  return documentTypes.map((type) => {
+    const found = existingDocs.find((d) => d.catalogValue === type.value)
+    return { catalogType: type.value, document: found || null }
+  })
 }
 
 export function PrecandidatosTable({
@@ -91,14 +81,19 @@ export function PrecandidatosTable({
   demarcacionName,
   mode = 'excel',
   autoLoad = true,
+  demarcacionStatus,
   onCountChange,
 }: PrecandidatosTableProps) {
   const [precandidatos, setPrecandidatos] = useState<Precandidato[]>([])
   const [loading, setLoading] = useState(autoLoad)
   const [error, setError] = useState<string | null>(null)
-  const [expandedDocs, setExpandedDocs] = useState<Set<number>>(new Set())
-  const [documentsMap, setDocumentsMap] = useState<Map<number, Documento[]>>(new Map())
+  const [expandedPrecandidato, setExpandedPrecandidato] = useState<number | null>(null)
+  const [documentsMap, setDocumentsMap] = useState<Map<number, DocumentRow[]>>(new Map())
   const [loadingDocs, setLoadingDocs] = useState<Set<number>>(new Set())
+  const [uploadingDocs, setUploadingDocs] = useState<Set<string>>(new Set())
+  const [documentTypes, setDocumentTypes] = useState<CatalogKeyValue[]>([])
+  const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
+  const isDocsEnabled = demarcacionStatus === StatusEnum.VALIDO
 
   const fetchPrecandidatos = useCallback(async () => {
     setLoading(true)
@@ -120,27 +115,52 @@ export function PrecandidatosTable({
     }
   }, [autoLoad, fetchPrecandidatos])
 
+  useEffect(() => {
+    getDocumentTypes()
+      .then(setDocumentTypes)
+      .catch(() => {})
+  }, [])
+
+  const refreshDocs = useCallback(
+    async (precandidatoId: number) => {
+      try {
+        const existingDocs = await getDocumentsByPrecandidato(precandidatoId)
+        setDocumentsMap((prev) => new Map(prev).set(precandidatoId, mergeDocs(documentTypes, existingDocs)))
+      } catch {
+        setDocumentsMap((prev) =>
+          new Map(prev).set(
+            precandidatoId,
+            documentTypes.map((t) => ({ catalogType: t.value, document: null }))
+          )
+        )
+      }
+    },
+    [documentTypes]
+  )
+
   const formatFullName = (p: Precandidato) =>
     `${p.apellidoPaterno} ${p.apellidoMaterno} ${p.nombre}`.trim()
 
   const handleTogglePrecandidato = async (precandidatoId: number) => {
-    setExpandedDocs((prev) => {
-      const next = new Set(prev)
-      if (next.has(precandidatoId)) {
-        next.delete(precandidatoId)
-        return next
-      }
-      next.add(precandidatoId)
-      return next
-    })
+    if (expandedPrecandidato === precandidatoId) {
+      setExpandedPrecandidato(null)
+      return
+    }
+
+    setExpandedPrecandidato(precandidatoId)
 
     if (!documentsMap.has(precandidatoId) && !loadingDocs.has(precandidatoId)) {
       setLoadingDocs((prev) => new Set(prev).add(precandidatoId))
       try {
-        const docs = await getDocumentsByPrecandidato(precandidatoId)
-        setDocumentsMap((prev) => new Map(prev).set(precandidatoId, docs))
+        const existingDocs = await getDocumentsByPrecandidato(precandidatoId)
+        setDocumentsMap((prev) => new Map(prev).set(precandidatoId, mergeDocs(documentTypes, existingDocs)))
       } catch {
-        setDocumentsMap((prev) => new Map(prev).set(precandidatoId, []))
+        setDocumentsMap((prev) =>
+          new Map(prev).set(
+            precandidatoId,
+            documentTypes.map((t) => ({ catalogType: t.value, document: null }))
+          )
+        )
       } finally {
         setLoadingDocs((prev) => {
           const next = new Set(prev)
@@ -148,6 +168,37 @@ export function PrecandidatosTable({
           return next
         })
       }
+    }
+  }
+
+  const handleFileSelect = async (precandidatoId: number, docType: string, file: File | null) => {
+    if (!file) return
+
+    const uploadKey = `${precandidatoId}-${docType}`
+    setUploadingDocs((prev) => new Set(prev).add(uploadKey))
+
+    try {
+      await uploadDocument(precandidatoId, docType, file)
+      await refreshDocs(precandidatoId)
+    } catch {
+      // error handled by parent
+    } finally {
+      setUploadingDocs((prev) => {
+        const next = new Set(prev)
+        next.delete(uploadKey)
+        return next
+      })
+      const input = fileInputRefs.current.get(uploadKey)
+      if (input) input.value = ''
+    }
+  }
+
+  const handleDeleteDoc = async (precandidatoId: number, documentId: number) => {
+    try {
+      await deleteDocument(documentId)
+      await refreshDocs(precandidatoId)
+    } catch {
+      // error handled by parent
     }
   }
 
@@ -180,6 +231,7 @@ export function PrecandidatosTable({
   }
 
   const isDetailMode = mode === 'detail'
+  const totalColumns = isDetailMode ? 30 : 10
 
   return (
     <Box sx={{ p: 2 }}>
@@ -188,8 +240,6 @@ export function PrecandidatosTable({
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox" />
-              <TableCell>Documentos</TableCell>
-              <TableCell align="center">Status</TableCell>
               <TableCell>Nombre Completo</TableCell>
               <TableCell>Cargo</TableCell>
               <TableCell>Calidad</TableCell>
@@ -227,139 +277,176 @@ export function PrecandidatosTable({
           <TableBody>
             {precandidatos.map((p, index) => {
               const precandidatoId = p.id || index
-              const isDocsExpanded = expandedDocs.has(precandidatoId)
-              const statusColors = getStatusColor(p.status)
-              const isDocsEnabled = p.status === 'VALIDO'
+              const isExpanded = expandedPrecandidato === precandidatoId
+              const merged = documentsMap.get(precandidatoId)
+              const isLoadingDocs = loadingDocs.has(precandidatoId)
 
               return (
-                <TableRow key={precandidatoId} hover>
-                  <TableCell padding="checkbox">
-                    <IconButton
-                      size="small"
-                      disabled={!isDocsEnabled}
-                      onClick={() => isDocsEnabled && handleTogglePrecandidato(precandidatoId)}
-                    >
-                      {isDocsExpanded ? (
-                        <KeyboardArrowDownIcon />
-                      ) : (
-                        <KeyboardArrowRightIcon />
-                      )}
-                    </IconButton>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="small"
-                      startIcon={<DescriptionIcon />}
-                      disabled={!isDocsEnabled}
-                      onClick={() => isDocsEnabled && handleTogglePrecandidato(precandidatoId)}
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Documentos
-                    </Button>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={getStatusLabel(p.status)}
-                      size="small"
-                      sx={{
-                        backgroundColor: statusColors.bg,
-                        color: statusColors.color,
-                        fontWeight: 500,
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>{formatFullName(p)}</TableCell>
-                  <TableCell>{p.cargo}</TableCell>
-                  <TableCell>{p.calidad}</TableCell>
-                  <TableCell>{p.claveIfe}</TableCell>
-                  {isDetailMode && <TableCell>{p.ocr}</TableCell>}
-                  <TableCell>{p.curp}</TableCell>
-                  <TableCell>{p.rfcHomoclave}</TableCell>
-                  {isDetailMode && (
-                    <>
-                      <TableCell>{p.accionAfirmativa}</TableCell>
-                      <TableCell>{p.internoExterno}</TableCell>
-                      <TableCell>{p.municipioDondeNacio}</TableCell>
-                      <TableCell>{p.estadoDondeNacio}</TableCell>
-                      <TableCell>{p.ocupacion}</TableCell>
-                      <TableCell>{p.calleDondeVive}</TableCell>
-                      <TableCell>{p.numeroDondeVive}</TableCell>
-                      <TableCell>{p.coloniaDondeVive}</TableCell>
-                      <TableCell>{p.municipioDondeVive}</TableCell>
-                      <TableCell>{p.estadoDondeVive}</TableCell>
-                      <TableCell>{p.codigoPostal}</TableCell>
-                      <TableCell>{p.tiempoDeResidenciaEnDomicilio}</TableCell>
-                      <TableCell>{p.genero}</TableCell>
-                      <TableCell>{p.escolaridad}</TableCell>
-                      <TableCell>{p.carrera}</TableCell>
-                      <TableCell>{p.lugarDondeTrabaja}</TableCell>
-                      <TableCell>{p.puestoEnSuTrabajo}</TableCell>
-                      <TableCell>{p.fechaIngresoTrabajo}</TableCell>
-                      <TableCell>{p.fechaTerminacionTrabajo}</TableCell>
-                    </>
+                <>
+                  <TableRow key={precandidatoId} hover>
+                    <TableCell padding="checkbox">
+                      <IconButton
+                        size="small"
+                        disabled={!isDocsEnabled}
+                        onClick={() => isDocsEnabled && handleTogglePrecandidato(precandidatoId)}
+                      >
+                        {isExpanded ? <KeyboardArrowDownIcon /> : <KeyboardArrowRightIcon />}
+                      </IconButton>
+                    </TableCell>
+                    <TableCell>{formatFullName(p)}</TableCell>
+                    <TableCell>{p.cargo}</TableCell>
+                    <TableCell>{p.calidad}</TableCell>
+                    <TableCell>{p.claveIfe}</TableCell>
+                    {isDetailMode && <TableCell>{p.ocr}</TableCell>}
+                    <TableCell>{p.curp}</TableCell>
+                    <TableCell>{p.rfcHomoclave}</TableCell>
+                    {isDetailMode && (
+                      <>
+                        <TableCell>{p.accionAfirmativa}</TableCell>
+                        <TableCell>{p.internoExterno}</TableCell>
+                        <TableCell>{p.municipioDondeNacio}</TableCell>
+                        <TableCell>{p.estadoDondeNacio}</TableCell>
+                        <TableCell>{p.ocupacion}</TableCell>
+                        <TableCell>{p.calleDondeVive}</TableCell>
+                        <TableCell>{p.numeroDondeVive}</TableCell>
+                        <TableCell>{p.coloniaDondeVive}</TableCell>
+                        <TableCell>{p.municipioDondeVive}</TableCell>
+                        <TableCell>{p.estadoDondeVive}</TableCell>
+                        <TableCell>{p.codigoPostal}</TableCell>
+                        <TableCell>{p.tiempoDeResidenciaEnDomicilio}</TableCell>
+                        <TableCell>{p.genero}</TableCell>
+                        <TableCell>{p.escolaridad}</TableCell>
+                        <TableCell>{p.carrera}</TableCell>
+                        <TableCell>{p.lugarDondeTrabaja}</TableCell>
+                        <TableCell>{p.puestoEnSuTrabajo}</TableCell>
+                        <TableCell>{p.fechaIngresoTrabajo}</TableCell>
+                        <TableCell>{p.fechaTerminacionTrabajo}</TableCell>
+                      </>
+                    )}
+                    <TableCell>{p.telefono}</TableCell>
+                    <TableCell>{p.correoElectronico}</TableCell>
+                  </TableRow>
+                  {isExpanded && (
+                    <TableRow key={`${precandidatoId}-expanded`}>
+                      <TableCell colSpan={totalColumns} sx={{ p: 0, backgroundColor: '#f5f5f5' }}>
+                        <Box sx={{ py: 1, pl: 4, pr: 2 }}>
+                          {isLoadingDocs ? (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                              <CircularProgress size={20} />
+                            </Box>
+                          ) : merged && merged.length > 0 ? (
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell>Tipo</TableCell>
+                                  <TableCell>Nombre</TableCell>
+                                  <TableCell align="center">Subir</TableCell>
+                                  <TableCell align="center">Eliminar</TableCell>
+                                  <TableCell align="center">Status</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {merged.map((row) => {
+                                  const doc = row.document
+                                  const status = doc?.status ?? StatusEnum.POR_VALIDAR
+                                  const docColors = getStatusColor(status)
+                                  const uploadKey = `${precandidatoId}-${row.catalogType}`
+                                  const isUploading = uploadingDocs.has(uploadKey)
+                                  const docUrl = doc ? getDocumentUrl(doc) : null
+                                  const hasFile = docUrl !== null
+
+                                  return (
+                                    <TableRow key={row.catalogType} hover>
+                                      <TableCell>
+                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                          {row.catalogType}
+                                        </Typography>
+                                      </TableCell>
+                                      <TableCell>
+                                        {hasFile ? (
+                                          <Typography
+                                            variant="body2"
+                                            component="a"
+                                            href={docUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                                          >
+                                            {row.catalogType}
+                                          </Typography>
+                                        ) : (
+                                          <Typography variant="body2" color="text.secondary">
+                                            NO NAME
+                                          </Typography>
+                                        )}
+                                      </TableCell>
+                                      <TableCell align="center">
+                                        <input
+                                          type="file"
+                                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                          style={{ display: 'none' }}
+                                          ref={(el) => {
+                                            if (el) fileInputRefs.current.set(uploadKey, el)
+                                          }}
+                                          onChange={(e) => handleFileSelect(precandidatoId, row.catalogType, e.target.files?.[0] || null)}
+                                        />
+                                        <Button
+                                          variant="outlined"
+                                          size="small"
+                                          startIcon={isUploading ? <CircularProgress size={14} /> : <CloudUploadIcon />}
+                                          onClick={() => fileInputRefs.current.get(uploadKey)?.click()}
+                                          disabled={!isDocsEnabled || isUploading || hasFile}
+                                          sx={{ textTransform: 'none' }}
+                                        >
+                                          Subir
+                                        </Button>
+                                      </TableCell>
+                                      <TableCell align="center">
+                                        <Button
+                                          variant="outlined"
+                                          size="small"
+                                          color="error"
+                                          startIcon={<DeleteIcon />}
+                                          disabled={!hasFile || !doc}
+                                          onClick={() => doc && handleDeleteDoc(precandidatoId, doc.id)}
+                                          sx={{ textTransform: 'none' }}
+                                        >
+                                          Eliminar
+                                        </Button>
+                                      </TableCell>
+                                      <TableCell align="center">
+                                        <Chip
+                                          label={getStatusLabel(status)}
+                                          size="small"
+                                          sx={{
+                                            backgroundColor: docColors.bg,
+                                            color: docColors.color,
+                                            fontWeight: 500,
+                                            height: 20,
+                                            fontSize: '0.7rem',
+                                          }}
+                                        />
+                                      </TableCell>
+                                    </TableRow>
+                                  )
+                                })}
+                              </TableBody>
+                            </Table>
+                          ) : (
+                            <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                              Cargando tipos de documento...
+                            </Typography>
+                          )}
+                        </Box>
+                      </TableCell>
+                    </TableRow>
                   )}
-                  <TableCell>{p.telefono}</TableCell>
-                  <TableCell>{p.correoElectronico}</TableCell>
-                </TableRow>
+                </>
               )
             })}
           </TableBody>
         </Table>
       </TableContainer>
-
-      {precandidatos.map((p, index) => {
-        const precandidatoId = p.id || index
-        const isDocsExpanded = expandedDocs.has(precandidatoId)
-        const docs = documentsMap.get(precandidatoId)
-        const isLoadingDocs = loadingDocs.has(precandidatoId)
-
-        return (
-          <Collapse key={`docs-${precandidatoId}`} in={isDocsExpanded}>
-            <Box sx={{ py: 1, pl: 4, pr: 2, backgroundColor: '#f5f5f5', borderRadius: 1, mt: 0.5, mb: 1 }}>
-              {isLoadingDocs ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                  <CircularProgress size={20} />
-                </Box>
-              ) : docs && docs.length > 0 ? (
-                <List dense disablePadding>
-                  {docs.map((doc) => {
-                    const docColors = getDocStatusColor(doc.status)
-                    return (
-                      <ListItem key={doc.id} disablePadding sx={{ py: 0.5 }}>
-                        <ListItemText
-                          primary={
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                {doc.name}
-                              </Typography>
-                              <Chip
-                                label={getDocStatusLabel(doc.status)}
-                                size="small"
-                                sx={{
-                                  backgroundColor: docColors.bg,
-                                  color: docColors.color,
-                                  fontWeight: 500,
-                                  height: 20,
-                                  fontSize: '0.7rem',
-                                }}
-                              />
-                            </Box>
-                          }
-                          secondary={doc.description}
-                        />
-                      </ListItem>
-                    )
-                  })}
-                </List>
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-                  No hay documentos registrados
-                </Typography>
-              )}
-            </Box>
-          </Collapse>
-        )
-      })}
     </Box>
   )
 }

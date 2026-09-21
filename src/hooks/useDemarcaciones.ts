@@ -7,6 +7,7 @@ import type {
 } from '../types/demarcacion'
 import type { Folio } from '../types/folio'
 import type { DemarcacionError } from '../services/demarcacionService'
+import { StatusEnum } from '../types/enums'
 import {
   getMyFolio,
   getCatalogoDemarcaciones,
@@ -122,11 +123,11 @@ export function useDemarcaciones() {
 
   const getStatusColor = (status: DemarcacionStatus) => {
     switch (status) {
-      case 'POR_VALIDAR':
+      case StatusEnum.POR_VALIDAR:
         return { bg: '#FFD100', color: '#000000' }
-      case 'VALIDO':
+      case StatusEnum.VALIDO:
         return { bg: '#4CAF50', color: '#FFFFFF' }
-      case 'ERROR':
+      case StatusEnum.ERROR:
         return { bg: '#F44336', color: '#FFFFFF' }
       default:
         return { bg: '#E0E0E0', color: '#757575' }
