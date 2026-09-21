@@ -97,11 +97,25 @@ export async function deleteDocument(documentId: number): Promise<void> {
   }
 }
 
-export function getDocumentUrl(doc: Documento): string | null {
-  if (!doc.bucketName || !doc.objectKey) return null
-  const env = import.meta.env.VITE_APP_ENV || 'local'
-  if (env === 'local') {
-    return `/files/${doc.objectKey}`
+export async function downloadDocumentFile(doc: Documento, token: string): Promise<void> {
+  const apiUrl = import.meta.env.VITE_API_URL
+
+  const response = await fetch(
+    `${apiUrl}/documents/${doc.id}/download`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}: ${response.statusText}`)
   }
-  return `https://${doc.bucketName}.s3.amazonaws.com/${doc.objectKey}`
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = doc.catalogValue
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }

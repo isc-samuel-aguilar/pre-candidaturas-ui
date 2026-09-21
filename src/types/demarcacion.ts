@@ -84,6 +84,7 @@ export interface Documento {
   status: StatusEnum | null
   bucketName: string | null
   objectKey: string | null
+  originalFilename?: string | null
   preCandidatoId: number
   createdDate: string
 }

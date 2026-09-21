@@ -13,6 +13,7 @@ import {
   Button,
   Chip,
   IconButton,
+  Alert,
 } from '@mui/material'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
@@ -24,10 +25,12 @@ import {
   getDocumentTypes,
   uploadDocument,
   deleteDocument,
-  getDocumentUrl,
+  downloadDocumentFile,
 } from '../services/documentService'
+import { useAuth } from '../contexts/AuthContext'
 import type { Precandidato, DemarcacionStatus, Documento, CatalogKeyValue } from '../types/demarcacion'
 import { StatusEnum } from '../types/enums'
+import { validateFile, isImageFile, compressImage } from '../utils/fileUtils'
 
 interface DocumentRow {
   catalogType: string
@@ -84,6 +87,7 @@ export function PrecandidatosTable({
   demarcacionStatus,
   onCountChange,
 }: PrecandidatosTableProps) {
+  const { token } = useAuth()
   const [precandidatos, setPrecandidatos] = useState<Precandidato[]>([])
   const [loading, setLoading] = useState(autoLoad)
   const [error, setError] = useState<string | null>(null)
@@ -91,6 +95,7 @@ export function PrecandidatosTable({
   const [documentsMap, setDocumentsMap] = useState<Map<number, DocumentRow[]>>(new Map())
   const [loadingDocs, setLoadingDocs] = useState<Set<number>>(new Set())
   const [uploadingDocs, setUploadingDocs] = useState<Set<string>>(new Set())
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [documentTypes, setDocumentTypes] = useState<CatalogKeyValue[]>([])
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
   const isDocsEnabled = demarcacionStatus === StatusEnum.VALIDO
@@ -174,11 +179,29 @@ export function PrecandidatosTable({
   const handleFileSelect = async (precandidatoId: number, docType: string, file: File | null) => {
     if (!file) return
 
+    setUploadError(null)
+
+    const validation = validateFile(file)
+    if (!validation.valid) {
+      setUploadError(validation.error || 'Archivo no válido')
+      return
+    }
+
+    let finalFile = file
+    if (isImageFile(file)) {
+      try {
+        finalFile = await compressImage(file)
+      } catch {
+        setUploadError('Error al procesar la imagen')
+        return
+      }
+    }
+
     const uploadKey = `${precandidatoId}-${docType}`
     setUploadingDocs((prev) => new Set(prev).add(uploadKey))
 
     try {
-      await uploadDocument(precandidatoId, docType, file)
+      await uploadDocument(precandidatoId, docType, finalFile)
       await refreshDocs(precandidatoId)
     } catch {
       // error handled by parent
@@ -235,6 +258,11 @@ export function PrecandidatosTable({
 
   return (
     <Box sx={{ p: 2 }}>
+      {uploadError && (
+        <Alert severity="warning" sx={{ mb: 1 }} onClose={() => setUploadError(null)}>
+          {uploadError}
+        </Alert>
+      )}
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400 }}>
         <Table size="small" stickyHeader>
           <TableHead>
@@ -348,12 +376,10 @@ export function PrecandidatosTable({
                               <TableBody>
                                 {merged.map((row) => {
                                   const doc = row.document
-                                  const status = doc?.status ?? StatusEnum.POR_VALIDAR
-                                  const docColors = getStatusColor(status)
+                                  const status = doc?.status ?? null
                                   const uploadKey = `${precandidatoId}-${row.catalogType}`
                                   const isUploading = uploadingDocs.has(uploadKey)
-                                  const docUrl = doc ? getDocumentUrl(doc) : null
-                                  const hasFile = docUrl !== null
+                                  const hasFile = doc !== null
 
                                   return (
                                     <TableRow key={row.catalogType} hover>
@@ -364,26 +390,24 @@ export function PrecandidatosTable({
                                       </TableCell>
                                       <TableCell>
                                         {hasFile ? (
-                                          <Typography
-                                            variant="body2"
-                                            component="a"
-                                            href={docUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                                          <Button
+                                            variant="text"
+                                            size="small"
+                                            onClick={() => doc && token && downloadDocumentFile(doc, token)}
+                                            sx={{ textTransform: 'none', color: 'primary.main', justifyContent: 'flex-start' }}
                                           >
-                                            {row.catalogType}
-                                          </Typography>
+                                            {doc?.originalFilename || row.catalogType}
+                                          </Button>
                                         ) : (
                                           <Typography variant="body2" color="text.secondary">
-                                            NO NAME
+                                            -
                                           </Typography>
                                         )}
                                       </TableCell>
                                       <TableCell align="center">
                                         <input
                                           type="file"
-                                          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                          accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
                                           style={{ display: 'none' }}
                                           ref={(el) => {
                                             if (el) fileInputRefs.current.set(uploadKey, el)
@@ -415,17 +439,31 @@ export function PrecandidatosTable({
                                         </Button>
                                       </TableCell>
                                       <TableCell align="center">
-                                        <Chip
-                                          label={getStatusLabel(status)}
-                                          size="small"
-                                          sx={{
-                                            backgroundColor: docColors.bg,
-                                            color: docColors.color,
-                                            fontWeight: 500,
-                                            height: 20,
-                                            fontSize: '0.7rem',
-                                          }}
-                                        />
+                                        {hasFile ? (
+                                          <Chip
+                                            label={getStatusLabel(status)}
+                                            size="small"
+                                            sx={{
+                                              backgroundColor: getStatusColor(status).bg,
+                                              color: getStatusColor(status).color,
+                                              fontWeight: 500,
+                                              height: 20,
+                                              fontSize: '0.7rem',
+                                            }}
+                                          />
+                                        ) : (
+                                          <Chip
+                                            label="Sin Cargar"
+                                            size="small"
+                                            sx={{
+                                              backgroundColor: '#E0E0E0',
+                                              color: '#757575',
+                                              fontWeight: 500,
+                                              height: 20,
+                                              fontSize: '0.7rem',
+                                            }}
+                                          />
+                                        )}
                                       </TableCell>
                                     </TableRow>
                                   )
