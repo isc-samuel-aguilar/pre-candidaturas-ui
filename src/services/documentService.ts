@@ -1,5 +1,5 @@
 import { apiClient, type ApiError } from './apiClient'
-import type { Documento, CatalogKeyValue } from '../types/demarcacion'
+import type { Documento, KeyValueCatalog } from '../types/demarcacion'
 
 export interface DocumentError {
   message: string
@@ -18,7 +18,7 @@ function mapApiError(error: ApiError): DocumentError {
 const CACHE_KEY = 'document_type_cache'
 const CACHE_TTL = 6 * 60 * 60 * 1000
 
-function getCache(): CatalogKeyValue[] | null {
+function getCache(): KeyValueCatalog[] | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     const rawTime = localStorage.getItem(`${CACHE_KEY}_time`)
@@ -34,7 +34,7 @@ function getCache(): CatalogKeyValue[] | null {
   return null
 }
 
-function setCache(data: CatalogKeyValue[]) {
+function setCache(data: KeyValueCatalog[]) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(data))
     localStorage.setItem(`${CACHE_KEY}_time`, Date.now().toString())
@@ -43,12 +43,12 @@ function setCache(data: CatalogKeyValue[]) {
   }
 }
 
-export async function getDocumentTypes(): Promise<CatalogKeyValue[]> {
+export async function getDocumentTypes(): Promise<KeyValueCatalog[]> {
   const cached = getCache()
   if (cached) return cached
 
   try {
-    const response = await apiClient.get<CatalogKeyValue[]>('/catalogs/key/DOCUMENT_TYPE')
+    const response = await apiClient.get<KeyValueCatalog[]>('/key-value-catalogs/key/DOCUMENT_TYPE')
     setCache(response.data)
     return response.data
   } catch (error) {
@@ -113,7 +113,7 @@ export async function downloadDocumentFile(doc: Documento, token: string): Promi
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = doc.originalFilename || doc.catalogValue
+  a.download = doc.originalFilename || doc.keyValueCatalogValue
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)

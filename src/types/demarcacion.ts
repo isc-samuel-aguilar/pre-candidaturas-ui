@@ -77,10 +77,10 @@ export interface Precandidato {
 
 export interface Documento {
   id: number
-  catalogId: number
-  catalogKey: string
-  catalogValue: string
-  catalogDescription: string
+  keyValueCatalogId: number
+  keyValueCatalogKey: string
+  keyValueCatalogValue: string
+  keyValueCatalogDescription: string
   status: StatusEnum | null
   bucketName: string | null
   objectKey: string | null
@@ -89,7 +89,7 @@ export interface Documento {
   createdDate: string
 }
 
-export interface CatalogKeyValue {
+export interface KeyValueCatalog {
   id: number
   key: string
   value: string

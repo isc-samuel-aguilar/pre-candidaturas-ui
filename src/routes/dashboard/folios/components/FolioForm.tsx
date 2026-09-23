@@ -13,7 +13,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { RepresentationSection } from './RepresentationSection'
 import { FolioInfoSection } from './FolioInfoSection'
 import { UserInfoSection } from './UserInfoSection'
-import type { Configuration, Folio, CreateFolioRequest, UpdateFolioRequest } from '../../../../types/folio'
+import type { Folio, CreateFolioRequest, UpdateFolioRequest } from '../../../../types/folio'
+import type { KeyValueCatalog } from '../../../../types/demarcacion'
 import type { DummyFolioData } from '../../../../utils/dummyData'
 
 interface RepresentationData {
@@ -47,7 +48,7 @@ interface UserData {
 }
 
 interface FolioFormProps {
-  representations: Configuration[]
+  representations: KeyValueCatalog[]
   editingFolio: Folio | null
   defaultFolio: string
   dummyDataToFill: DummyFolioData | null
@@ -58,7 +59,7 @@ interface FolioFormProps {
   error: string | null
 }
 
-function createEmptyRepresentations(configs: Configuration[]): RepresentationData[] {
+function createEmptyRepresentations(configs: KeyValueCatalog[]): RepresentationData[] {
   return configs.map((config) => ({
     representation: config.value,
     paternalLastName: '',
@@ -107,7 +108,7 @@ function mapFolioToFormData(folio: Folio): FolioFormData {
   }
 }
 
-function mapFolioToRepresentations(folio: Folio, configs: Configuration[]): RepresentationData[] {
+function mapFolioToRepresentations(folio: Folio, configs: KeyValueCatalog[]): RepresentationData[] {
   return configs.map((config) => {
     const rep = folio.representations.find(
       (r) => r.representation === config.value

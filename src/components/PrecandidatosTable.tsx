@@ -28,7 +28,7 @@ import {
   downloadDocumentFile,
 } from '../services/documentService'
 import { useAuth } from '../contexts/AuthContext'
-import type { Precandidato, DemarcacionStatus, Documento, CatalogKeyValue } from '../types/demarcacion'
+import type { Precandidato, DemarcacionStatus, Documento, KeyValueCatalog } from '../types/demarcacion'
 import { StatusEnum } from '../types/enums'
 import { validateFile, isImageFile, compressImage } from '../utils/fileUtils'
 
@@ -72,9 +72,9 @@ function getStatusColor(status?: StatusEnum | null) {
   }
 }
 
-function mergeDocs(documentTypes: CatalogKeyValue[], existingDocs: Documento[]): DocumentRow[] {
+function mergeDocs(documentTypes: KeyValueCatalog[], existingDocs: Documento[]): DocumentRow[] {
   return documentTypes.map((type) => {
-    const found = existingDocs.find((d) => d.catalogValue === type.value)
+    const found = existingDocs.find((d) => d.keyValueCatalogValue === type.value)
     return { catalogType: type.value, document: found || null }
   })
 }
@@ -96,7 +96,7 @@ export function PrecandidatosTable({
   const [loadingDocs, setLoadingDocs] = useState<Set<number>>(new Set())
   const [uploadingDocs, setUploadingDocs] = useState<Set<string>>(new Set())
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [documentTypes, setDocumentTypes] = useState<CatalogKeyValue[]>([])
+  const [documentTypes, setDocumentTypes] = useState<KeyValueCatalog[]>([])
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
   const isDocsEnabled = demarcacionStatus === StatusEnum.VALIDO
 

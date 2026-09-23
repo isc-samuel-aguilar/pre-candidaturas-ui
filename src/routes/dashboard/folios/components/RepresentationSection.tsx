@@ -1,5 +1,5 @@
 import { Box, TextField, Typography, Stack } from '@mui/material'
-import type { Configuration } from '../../../../types/folio'
+import type { KeyValueCatalog } from '../../../../types/demarcacion'
 
 interface RepresentationData {
   representation: string
@@ -11,7 +11,7 @@ interface RepresentationData {
 }
 
 interface RepresentationSectionProps {
-  representations: Configuration[]
+  representations: KeyValueCatalog[]
   values: RepresentationData[]
   onChange: (index: number, field: keyof RepresentationData, value: string) => void
   errors: string[]

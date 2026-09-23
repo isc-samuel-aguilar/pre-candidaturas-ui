@@ -65,11 +65,3 @@ export interface UpdateFolioRequest {
   codigoPostal: string
   representations: FolioRepresentation[]
 }
-
-export interface Configuration {
-  id: number
-  key: string
-  value: string
-  type: string
-  description: string
-}

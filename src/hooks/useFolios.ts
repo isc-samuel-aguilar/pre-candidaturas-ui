@@ -12,12 +12,12 @@ import type {
   Folio,
   CreateFolioRequest,
   UpdateFolioRequest,
-  Configuration,
 } from '../types/folio'
+import type { KeyValueCatalog } from '../types/demarcacion'
 
 export function useFolios() {
   const [folios, setFolios] = useState<Folio[]>([])
-  const [representations, setRepresentations] = useState<Configuration[]>([])
+  const [representations, setRepresentations] = useState<KeyValueCatalog[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<FolioError | null>(null)
 

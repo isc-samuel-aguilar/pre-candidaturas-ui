@@ -3,8 +3,8 @@ import type {
   Folio,
   CreateFolioRequest,
   UpdateFolioRequest,
-  Configuration,
 } from '../types/folio'
+import type { KeyValueCatalog } from '../types/demarcacion'
 
 export interface FolioError {
   message: string
@@ -20,10 +20,10 @@ function mapApiError(error: ApiError): FolioError {
   }
 }
 
-export async function getRepresentations(): Promise<Configuration[]> {
+export async function getRepresentations(): Promise<KeyValueCatalog[]> {
   try {
-    const response = await apiClient.get<Configuration[]>(
-      '/catalogs/key/REPRESENTACION'
+    const response = await apiClient.get<KeyValueCatalog[]>(
+      '/key-value-catalogs/key/REPRESENTACION'
     )
     return response.data
   } catch (error) {
