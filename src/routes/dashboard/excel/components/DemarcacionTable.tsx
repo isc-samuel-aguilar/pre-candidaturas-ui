@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, Fragment } from 'react'
 import {
   Table,
   TableBody,
@@ -209,8 +209,8 @@ export function DemarcacionTable({
               const isExpanded = expandedRows.has(row.catalogo.id)
 
               return (
-                <>
-                  <TableRow key={row.catalogo.id} hover>
+                <Fragment key={row.catalogo.id}>
+                  <TableRow hover>
                     <TableCell padding="checkbox">
                       <IconButton
                         size="small"
@@ -313,7 +313,7 @@ export function DemarcacionTable({
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </Fragment>
               )
             })}
           </TableBody>

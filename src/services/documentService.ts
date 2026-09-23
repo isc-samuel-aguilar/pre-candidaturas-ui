@@ -113,7 +113,7 @@ export async function downloadDocumentFile(doc: Documento, token: string): Promi
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = doc.catalogValue
+  a.download = doc.originalFilename || doc.catalogValue
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)

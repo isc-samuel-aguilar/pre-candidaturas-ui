@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Typography, Snackbar, Alert } from '@mui/material'
 import { useDemarcaciones } from '../../../hooks/useDemarcaciones'
 import { FolioSection } from './components/FolioSection'
@@ -30,7 +30,11 @@ function ExcelPage() {
     severity: 'success' | 'error'
   }>({ open: false, message: '', severity: 'success' })
 
+  const didFetch = useRef(false)
+
   useEffect(() => {
+    if (didFetch.current) return
+    didFetch.current = true
     fetchData()
   }, [fetchData])
 

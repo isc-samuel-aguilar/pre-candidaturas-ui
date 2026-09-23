@@ -26,7 +26,7 @@ function LoginPage() {
   const { login, error, clearError, isLoading: authLoading, isAuthenticated, user } = useAuth()
   // const [username, setUsername] = useState('admin')
   // const [password, setPassword] = useState('adminPassword')
-  const [username, setUsername] = useState('025AGS')
+  const [username, setUsername] = useState('002AGS')
   const [password, setPassword] = useState('Test_123')
   const [loading, setLoading] = useState(false)
   const [attempts, setAttempts] = useState(0)
