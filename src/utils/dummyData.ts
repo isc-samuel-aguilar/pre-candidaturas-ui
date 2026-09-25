@@ -1,3 +1,43 @@
+export type DummyDataProvider = () => void
+
+declare global {
+  interface Window {
+    dummyData?: (section?: string) => void
+  }
+}
+
+const providers = new Map<string, DummyDataProvider>()
+
+export function resolveDummySection(
+  pathname: string = window.location.pathname
+): string {
+  const segments = pathname.split('/').filter(Boolean)
+  const lastSegment = segments[segments.length - 1]
+  return lastSegment ?? ''
+}
+
+export function registerDummyDataProvider(
+  section: string,
+  provider: DummyDataProvider
+): () => void {
+  providers.set(section, provider)
+  return () => {
+    if (providers.get(section) === provider) {
+      providers.delete(section)
+    }
+  }
+}
+
+export function runDummyData(section?: string): void {
+  const key = section ?? resolveDummySection()
+  const provider = providers.get(key)
+  if (!provider) {
+    console.warn(`dummyData: no provider registered for section "${key}"`)
+    return
+  }
+  provider()
+}
+
 export interface DummyFolioData {
   folio: string
   email: string
@@ -75,9 +115,6 @@ export function generateDummyData(path: string, currentFolio: string): DummyFoli
     }
   } 
 
-  console.warn('path not found')
+  console.warn(`dummyData: no data generator for path "${path}"`)
   return null
-
-
-
 }

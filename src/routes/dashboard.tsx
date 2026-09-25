@@ -1,7 +1,9 @@
 import { createFileRoute, Outlet, useNavigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { Box } from '@mui/material'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
+import { runDummyData } from '../utils/dummyData'
 import { Header } from './dashboard/components/Header'
 
 interface NavItem {
@@ -29,6 +31,14 @@ function DashboardLayout() {
     logout()
     navigate({ to: '/login' })
   }
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    window.dummyData = runDummyData
+    return () => {
+      delete window.dummyData
+    }
+  }, [])
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>

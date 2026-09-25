@@ -4,7 +4,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useFolios } from '../../../hooks/useFolios'
 import { FolioForm } from './components/FolioForm'
 import { FolioList } from './components/FolioList'
-import { generateDummyData, type DummyFolioData } from '../../../utils/dummyData'
+import {
+  generateDummyData,
+  registerDummyDataProvider,
+  type DummyFolioData,
+} from '../../../utils/dummyData'
 import type { Folio, CreateFolioRequest, UpdateFolioRequest } from '../../../types/folio'
 
 export const Route = createFileRoute('/dashboard/folios/')({
@@ -54,15 +58,13 @@ function FoliosPage() {
   }, [fetchRepresentations, fetchFolios])
 
   useEffect(() => {
-    ;(window as unknown as Record<string, unknown>).dummyData = (path: string) => {
-      const data = generateDummyData(path, nextFolio)
+    if (!import.meta.env.DEV) return
+    return registerDummyDataProvider('folios', () => {
+      const data = generateDummyData('folios', nextFolio)
       if (data) {
         setDummyDataToFill(data)
       }
-    }
-    return () => {
-      delete (window as unknown as Record<string, unknown>).dummyData
-    }
+    })
   }, [nextFolio])
 
   const handleDummyDataConsumed = useCallback(() => {
