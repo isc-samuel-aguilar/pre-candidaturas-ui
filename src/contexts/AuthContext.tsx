@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { login as authLogin, getCurrentUser, isAuthError, type AuthError } from '../services/authService'
 import { apiClient } from '../services/apiClient'
 
@@ -22,6 +22,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<User>
   logout: () => void
   clearError: () => void
+  whenReady: () => Promise<void>
 }
 
 const SESSION_KEY = 'precandidaturas_session'
@@ -69,6 +70,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<AuthError | null>(null)
 
+  const hydratedRef = useRef(false)
+  const readyWaitersRef = useRef<Array<() => void>>([])
+
+  const markHydrated = useCallback(() => {
+    hydratedRef.current = true
+    const waiters = readyWaitersRef.current
+    readyWaitersRef.current = []
+    waiters.forEach((resolve) => resolve())
+  }, [])
+
+  const whenReady = useCallback((): Promise<void> => {
+    if (hydratedRef.current) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      readyWaitersRef.current.push(resolve)
+    })
+  }, [])
+
   useEffect(() => {
     apiClient.setToken(token)
   }, [token])
@@ -89,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) {
       setIsLoading(false)
+      markHydrated()
       return
     }
 
@@ -108,10 +127,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false)
+        markHydrated()
       })
 
     return () => { cancelled = true }
-  }, [token])
+  }, [token, markHydrated])
 
   const login = useCallback(async (username: string, password: string): Promise<User> => {
     setIsLoading(true)
@@ -158,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         clearError,
+        whenReady,
       }}
     >
       {children}

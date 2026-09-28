@@ -3,34 +3,33 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Typography, Snackbar, Alert } from '@mui/material'
 import { useDemarcaciones } from '../../../hooks/useDemarcaciones'
 import { FolioSection } from './components/FolioSection'
-import { ExamplesSection } from './components/ExamplesSection'
 import { DemarcacionTable } from './components/DemarcacionTable'
-import type { DemarcacionRow } from '../../../types/demarcacion'
 import type { RouterContext } from '../../../main'
+import type { DemarcacionRow } from '../../../types/demarcacion'
+import type { StatusEnum } from '../../../types/enums'
 
-export const Route = createFileRoute('/dashboard/excel/')({
+export const Route = createFileRoute('/dashboard/excel/$userName')({
   beforeLoad: ({ context }) => {
     const { auth } = context as RouterContext
     const role = auth.user?.role
-    if (role !== 'ADMIN' && role !== 'REGISTER') {
-      throw redirect({ to: '/dashboard' })
+    if (role !== 'ADMIN' && role !== 'VALIDATOR') {
+      throw redirect({ to: '/dashboard/excel' })
     }
   },
-  component: ExcelPage,
+  component: ExcelValidationPage,
 })
 
-function ExcelPage() {
+function ExcelValidationPage() {
+  const { userName } = Route.useParams()
   const {
     folio,
     demarcaciones,
     loading,
-    uploadingIds,
     error,
     fetchData,
-    handleUpload,
-    handleDelete,
+    updateStatus,
     getStatusColor,
-  } = useDemarcaciones()
+  } = useDemarcaciones({ userName })
 
   const [snackbar, setSnackbar] = useState<{
     open: boolean
@@ -38,52 +37,41 @@ function ExcelPage() {
     severity: 'success' | 'error'
   }>({ open: false, message: '', severity: 'success' })
 
-  const didFetch = useRef(false)
+  const didFetch = useRef<string | null>(null)
 
   useEffect(() => {
-    if (didFetch.current) return
-    didFetch.current = true
+    if (didFetch.current === userName) return
+    didFetch.current = userName
     fetchData()
-  }, [fetchData])
+  }, [fetchData, userName])
 
-  const handleUploadWithFeedback = useCallback(
-    async (demarcacion: DemarcacionRow, file: File) => {
+  const handleSaveStatus = useCallback(
+    async (
+      demarcacion: DemarcacionRow,
+      status: StatusEnum,
+      statusDescription: string | null
+    ) => {
+      if (!demarcacion.folioDemarcacion) return
+
       try {
-        await handleUpload(demarcacion.catalogo, file)
+        await updateStatus(demarcacion.folioDemarcacion, status, statusDescription)
         setSnackbar({
           open: true,
-          message: `Archivo cargado exitosamente para ${demarcacion.catalogo.demarcacion}`,
+          message: `Demarcación ${
+            demarcacion.catalogo.alias || demarcacion.catalogo.demarcacion
+          } actualizada correctamente`,
           severity: 'success',
         })
-      } catch {
+      } catch (err) {
         setSnackbar({
           open: true,
-          message: error?.message || 'Error al cargar el archivo',
+          message: (err as { message?: string }).message || 'Error al guardar los cambios',
           severity: 'error',
         })
+        throw err
       }
     },
-    [handleUpload, error]
-  )
-
-  const handleDeleteWithFeedback = useCallback(
-    async (folioDemarcacionId: number) => {
-      try {
-        await handleDelete(folioDemarcacionId)
-        setSnackbar({
-          open: true,
-          message: 'Demarcación eliminada correctamente',
-          severity: 'success',
-        })
-      } catch {
-        setSnackbar({
-          open: true,
-          message: error?.message || 'Error al eliminar la demarcación',
-          severity: 'error',
-        })
-      }
-    },
-    [handleDelete, error]
+    [updateStatus]
   )
 
   const handleCloseSnackbar = useCallback(() => {
@@ -93,20 +81,29 @@ function ExcelPage() {
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
-        Registrar con Excel
+        Validación de Folio
+      </Typography>
+      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+        Usuario: {userName}
       </Typography>
 
-      <FolioSection folio={folio} demarcaciones={demarcaciones} loading={loading} />
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error.message || 'No se pudo cargar el folio del usuario'}
+        </Alert>
+      )}
 
-      <ExamplesSection />
+      <FolioSection folio={folio} demarcaciones={demarcaciones} loading={loading} />
 
       <DemarcacionTable
         demarcaciones={demarcaciones}
         loading={loading}
-        uploadingIds={uploadingIds}
-        onUpload={handleUploadWithFeedback}
-        onDelete={handleDeleteWithFeedback}
+        uploadingIds={new Set<number>()}
+        onUpload={async () => {}}
+        onDelete={async () => {}}
         getStatusColor={getStatusColor}
+        mode="validate"
+        onSaveStatus={handleSaveStatus}
       />
 
       <Snackbar

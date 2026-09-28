@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Box, Divider, Snackbar, Alert } from '@mui/material'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useFolios } from '../../../hooks/useFolios'
+import { useAuth } from '../../../contexts/AuthContext'
 import { FolioForm } from './components/FolioForm'
 import { FolioList } from './components/FolioList'
 import {
@@ -41,6 +42,8 @@ function FoliosPage() {
     update,
     remove,
   } = useFolios()
+  const { user } = useAuth()
+  const isValidator = user?.role === 'VALIDATOR'
 
   const [editingFolio, setEditingFolio] = useState<Folio | null>(null)
   const [dummyDataToFill, setDummyDataToFill] = useState<DummyFolioData | null>(null)
@@ -53,19 +56,23 @@ function FoliosPage() {
   const nextFolio = useMemo(() => computeNextFolio(folios), [folios])
 
   useEffect(() => {
-    fetchRepresentations()
     fetchFolios()
-  }, [fetchRepresentations, fetchFolios])
+  }, [fetchFolios])
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return
+    if (isValidator) return
+    fetchRepresentations()
+  }, [fetchRepresentations, isValidator])
+
+  useEffect(() => {
+    if (isValidator || !import.meta.env.DEV) return
     return registerDummyDataProvider('folios', () => {
       const data = generateDummyData('folios', nextFolio)
       if (data) {
         setDummyDataToFill(data)
       }
     })
-  }, [nextFolio])
+  }, [nextFolio, isValidator])
 
   const handleDummyDataConsumed = useCallback(() => {
     setDummyDataToFill(null)
@@ -136,6 +143,14 @@ function FoliosPage() {
   const handleCloseSnackbar = useCallback(() => {
     setSnackbar((prev) => ({ ...prev, open: false }))
   }, [])
+
+  if (isValidator) {
+    return (
+      <Box>
+        <FolioList folios={folios} loading={loading} error={null} showActions={false} />
+      </Box>
+    )
+  }
 
   return (
     <Box>

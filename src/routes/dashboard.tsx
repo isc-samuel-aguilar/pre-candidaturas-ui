@@ -13,9 +13,9 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Captura de Folio', to: '/dashboard/folios', roles: ['ADMIN'] },
+  { label: 'Captura de Folio', to: '/dashboard/folios', roles: ['ADMIN', 'VALIDATOR'] },
   { label: 'Registrar con Excel', to: '/dashboard/excel', roles: ['ADMIN', 'REGISTER'] },
-  { label: 'Consultar', to: '/dashboard', roles: ['ADMIN', 'REGISTER'] },
+  { label: 'Consultar', to: '/dashboard', roles: ['ADMIN', 'REGISTER', 'VALIDATOR'] },
 ]
 
 export const Route = createFileRoute('/dashboard')({

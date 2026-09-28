@@ -1,17 +1,20 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { Box, Card, CardContent, Typography, TextField, Button, Alert, CircularProgress } from '@mui/material'
+import { Box, Card, CardContent, Typography, TextField, Button, Alert, CircularProgress, Chip } from '@mui/material'
 import { useState, useCallback, useEffect } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
 import { ThemeToggle } from '../components/ThemeToggle'
+import { resolvePostLoginRoute } from '../utils/redirect'
 import type { RouterContext } from '../main'
 
 export const Route = createFileRoute('/login')({
-  beforeLoad: ({ context }) => {
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+    redirect: typeof search.redirect === 'string' ? search.redirect : undefined,
+  }),
+  beforeLoad: ({ context, search }) => {
     const { auth } = context as RouterContext
     if (auth.isAuthenticated) {
-      const defaultRoute = auth.user?.role === 'REGISTER' ? '/dashboard/excel' : '/dashboard/folios'
-      throw redirect({ to: defaultRoute })
+      throw redirect({ href: resolvePostLoginRoute(search.redirect, auth.user?.role) })
     }
   },
   component: LoginPage,
@@ -20,14 +23,19 @@ export const Route = createFileRoute('/login')({
 const MAX_LOGIN_ATTEMPTS = 5
 const LOCKOUT_DURATION_MS = 5 * 60 * 1000
 
+const DEV_QUICK_FILL = [
+  { label: 'Admin', username: 'admin', password: 'adminPassword' },
+  { label: 'Validador', username: 'validator001', password: 'Test_123' },
+  { label: 'Registro', username: '002AGS', password: 'Test_123' },
+] as const
+
 function LoginPage() {
   const navigate = Route.useNavigate()
+  const { redirect: redirectTarget } = Route.useSearch()
   const { isDarkMode, toggleTheme } = useTheme()
   const { login, error, clearError, isLoading: authLoading, isAuthenticated, user } = useAuth()
-  // const [username, setUsername] = useState('admin')
-  // const [password, setPassword] = useState('adminPassword')
-  const [username, setUsername] = useState('002AGS')
-  const [password, setPassword] = useState('Test_123')
+  const [username, setUsername] = useState(import.meta.env.DEV ? 'admin' : '')
+  const [password, setPassword] = useState(import.meta.env.DEV ? 'adminPassword' : '')
   const [loading, setLoading] = useState(false)
   const [attempts, setAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
@@ -36,10 +44,9 @@ function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      const defaultRoute = user.role === 'REGISTER' ? '/dashboard/excel' : '/dashboard/folios'
-      navigate({ to: defaultRoute })
+      navigate({ href: resolvePostLoginRoute(redirectTarget, user.role) })
     }
-  }, [isAuthenticated, user, navigate])
+  }, [isAuthenticated, user, navigate, redirectTarget])
 
   const getLockoutTimeRemaining = useCallback(() => {
     if (!lockoutUntil) return 0
@@ -129,6 +136,24 @@ function LoginPage() {
               autoComplete="current-password"
               disabled={isLockedOut || loading}
             />
+
+            {import.meta.env.DEV && (
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+                {DEV_QUICK_FILL.map((cred) => (
+                  <Chip
+                    key={cred.label}
+                    size="small"
+                    label={cred.label}
+                    disabled={isLockedOut || loading}
+                    onClick={() => {
+                      setUsername(cred.username)
+                      setPassword(cred.password)
+                      clearError()
+                    }}
+                  />
+                ))}
+              </Box>
+            )}
 
             {isLockedOut && (
               <Alert severity="warning" sx={{ mt: 2 }}>

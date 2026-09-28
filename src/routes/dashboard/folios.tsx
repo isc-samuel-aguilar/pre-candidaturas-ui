@@ -5,7 +5,8 @@ import type { RouterContext } from '../../main'
 export const Route = createFileRoute('/dashboard/folios')({
   beforeLoad: ({ context }) => {
     const { auth } = context as RouterContext
-    if (auth.user?.role !== 'ADMIN') {
+    const role = auth.user?.role
+    if (role !== 'ADMIN' && role !== 'VALIDATOR') {
       throw redirect({ to: '/dashboard' })
     }
   },

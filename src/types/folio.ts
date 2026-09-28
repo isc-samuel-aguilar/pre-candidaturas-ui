@@ -1,3 +1,5 @@
+import type { StatusEnum } from './enums'
+
 export interface FolioRepresentation {
   id?: number
   representation: string
@@ -22,6 +24,10 @@ export interface FolioUser {
   phone: string
 }
 
+export interface FolioUserSummary {
+  username: string
+}
+
 export interface Folio {
   id: number
   folio: string
@@ -33,7 +39,8 @@ export interface Folio {
   estado: string
   codigoPostal: string
   userId: number
-  user: FolioUser | null
+  user: FolioUserSummary | null
+  status: StatusEnum | null
   representations: FolioRepresentation[]
   createdBy: string
   updatedBy: string | null

@@ -16,10 +16,10 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  MenuItem,
   FormControl,
   InputLabel,
   Select,
-  MenuItem,
   InputAdornment,
   IconButton,
 } from '@mui/material'
@@ -49,6 +49,30 @@ interface DemarcacionTableProps {
   onUpload: (demarcacion: DemarcacionRow, file: File) => Promise<void>
   onDelete: (folioDemarcacionId: number) => Promise<void>
   getStatusColor: (status: DemarcacionStatus) => { bg: string; color: string }
+  mode?: 'upload' | 'validate'
+  onSaveStatus?: (
+    demarcacion: DemarcacionRow,
+    status: StatusEnum,
+    statusDescription: string | null
+  ) => Promise<void>
+}
+
+interface RowEditState {
+  status: StatusEnum | ''
+  comment: string
+  saving: boolean
+}
+
+function deriveRowEdit(row: DemarcacionRow): RowEditState {
+  const currentStatus = row.folioDemarcacion?.status
+  return {
+    status:
+      currentStatus === StatusEnum.VALIDO || currentStatus === StatusEnum.ERROR
+        ? currentStatus
+        : '',
+    comment: row.folioDemarcacion?.statusDescription ?? '',
+    saving: false,
+  }
 }
 
 export function DemarcacionTable({
@@ -58,14 +82,20 @@ export function DemarcacionTable({
   onUpload,
   onDelete,
   getStatusColor,
+  mode = 'upload',
+  onSaveStatus,
 }: DemarcacionTableProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedDemarcacion, setSelectedDemarcacion] = useState<DemarcacionRow | null>(null)
   const [searchText, setSearchText] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+  const [rowEdits, setRowEdits] = useState<Map<number, RowEditState>>(new Map())
   const fileInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
   const navigate = useNavigate()
+
+  const isValidateMode = mode === 'validate'
+  const totalColumns = isValidateMode ? 7 : 6
 
   const filteredDemarcaciones = useMemo(() => {
     return demarcaciones.filter((d) => {
@@ -135,6 +165,49 @@ export function DemarcacionTable({
     })
   }
 
+  const getRowEdit = (row: DemarcacionRow): RowEditState =>
+    rowEdits.get(row.catalogo.id) ?? deriveRowEdit(row)
+
+  const patchRowEdit = (row: DemarcacionRow, patch: Partial<RowEditState>) => {
+    setRowEdits((prev) => {
+      const next = new Map(prev)
+      const base = prev.get(row.catalogo.id) ?? deriveRowEdit(row)
+      next.set(row.catalogo.id, { ...base, ...patch })
+      return next
+    })
+  }
+
+  const clearRowEdit = (row: DemarcacionRow) => {
+    setRowEdits((prev) => {
+      const next = new Map(prev)
+      next.delete(row.catalogo.id)
+      return next
+    })
+  }
+
+  const isRowDirty = (row: DemarcacionRow) => {
+    const edit = getRowEdit(row)
+    const base = deriveRowEdit(row)
+    return edit.status !== base.status || edit.comment !== base.comment
+  }
+
+  const handleSaveStatus = async (row: DemarcacionRow) => {
+    const edit = getRowEdit(row)
+    if (!row.folioDemarcacion || !edit.status || !onSaveStatus) return
+
+    patchRowEdit(row, { saving: true })
+    try {
+      await onSaveStatus(row, edit.status, edit.comment.trim() || null)
+      clearRowEdit(row)
+    } catch {
+      patchRowEdit(row, { saving: false })
+    }
+  }
+
+  const handleCancelRowEdit = (row: DemarcacionRow) => {
+    clearRowEdit(row)
+  }
+
   const getStatusLabel = (status: DemarcacionStatus) => {
     switch (status) {
       case StatusEnum.POR_VALIDAR:
@@ -196,9 +269,12 @@ export function DemarcacionTable({
               <TableCell padding="checkbox" />
               <TableCell>Demarcación</TableCell>
               <TableCell align="center">Pre Candidatos</TableCell>
-              <TableCell align="center">Subir</TableCell>
-              <TableCell align="center">Eliminar</TableCell>
+              {!isValidateMode && <TableCell align="center">Subir</TableCell>}
+              {!isValidateMode && <TableCell align="center">Eliminar</TableCell>}
               <TableCell align="center">Status</TableCell>
+              {isValidateMode && <TableCell align="center">Validar</TableCell>}
+              {isValidateMode && <TableCell>Comentarios</TableCell>}
+              {isValidateMode && <TableCell align="center">Acciones</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -236,7 +312,10 @@ export function DemarcacionTable({
                         onClick={() => {
                           if (row.folioDemarcacion) {
                             navigate({
-                              to: '/dashboard/demarcaciones/' + row.folioDemarcacion.id,
+                              to:
+                                '/dashboard/demarcaciones/' +
+                                row.folioDemarcacion.id,
+                              search: { folioId: row.folioDemarcacion.folioId },
                             })
                           }
                         }}
@@ -244,40 +323,44 @@ export function DemarcacionTable({
                         Pre Candidatos
                       </Button>
                     </TableCell>
-                    <TableCell align="center">
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        style={{ display: 'none' }}
-                        ref={(el) => {
-                          if (el) fileInputRefs.current.set(row.catalogo.id, el)
-                        }}
-                        onChange={(e) => handleFileSelect(row, e.target.files?.[0] || null)}
-                      />
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={
-                          isUploading ? <CircularProgress size={16} /> : <CloudUploadIcon />
-                        }
-                        onClick={() => fileInputRefs.current.get(row.catalogo.id)?.click()}
-                        disabled={isUploading || hasStatus}
-                      >
-                        Subir
-                      </Button>
-                    </TableCell>
-                    <TableCell align="center">
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        color="error"
-                        startIcon={<DeleteIcon />}
-                        onClick={() => handleDeleteClick(row)}
-                        disabled={!hasStatus || isUploading}
-                      >
-                        Eliminar
-                      </Button>
-                    </TableCell>
+                    {!isValidateMode && (
+                      <TableCell align="center">
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls"
+                          style={{ display: 'none' }}
+                          ref={(el) => {
+                            if (el) fileInputRefs.current.set(row.catalogo.id, el)
+                          }}
+                          onChange={(e) => handleFileSelect(row, e.target.files?.[0] || null)}
+                        />
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={
+                            isUploading ? <CircularProgress size={16} /> : <CloudUploadIcon />
+                          }
+                          onClick={() => fileInputRefs.current.get(row.catalogo.id)?.click()}
+                          disabled={isUploading || hasStatus}
+                        >
+                          Subir
+                        </Button>
+                      </TableCell>
+                    )}
+                    {!isValidateMode && (
+                      <TableCell align="center">
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          color="error"
+                          startIcon={<DeleteIcon />}
+                          onClick={() => handleDeleteClick(row)}
+                          disabled={!hasStatus || isUploading}
+                        >
+                          Eliminar
+                        </Button>
+                      </TableCell>
+                    )}
                     <TableCell align="center">
                       <Box
                         sx={{
@@ -294,16 +377,85 @@ export function DemarcacionTable({
                         </Typography>
                       </Box>
                     </TableCell>
+                    {isValidateMode && (
+                      <TableCell align="center">
+                        <TextField
+                          select
+                          size="small"
+                          label="Validar"
+                          value={getRowEdit(row).status}
+                          disabled={!row.folioDemarcacion || getRowEdit(row).saving}
+                          onChange={(e) =>
+                            patchRowEdit(row, {
+                              status: e.target.value as StatusEnum | '',
+                            })
+                          }
+                          sx={{ minWidth: 130 }}
+                        >
+                          <MenuItem value="">
+                            <em>Seleccionar</em>
+                          </MenuItem>
+                          <MenuItem value={StatusEnum.VALIDO}>Válido</MenuItem>
+                          <MenuItem value={StatusEnum.ERROR}>Error</MenuItem>
+                        </TextField>
+                      </TableCell>
+                    )}
+                    {isValidateMode && (
+                      <TableCell>
+                        <TextField
+                          size="small"
+                          fullWidth
+                          multiline
+                          maxRows={3}
+                          placeholder="Comentario..."
+                          value={getRowEdit(row).comment}
+                          disabled={!row.folioDemarcacion || getRowEdit(row).saving}
+                          onChange={(e) => patchRowEdit(row, { comment: e.target.value })}
+                        />
+                      </TableCell>
+                    )}
+                    {isValidateMode && (
+                      <TableCell align="center">
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                          <Button
+                            variant="contained"
+                            size="small"
+                            onClick={() => handleSaveStatus(row)}
+                            disabled={
+                              !row.folioDemarcacion ||
+                              !getRowEdit(row).status ||
+                              !isRowDirty(row) ||
+                              getRowEdit(row).saving
+                            }
+                          >
+                            {getRowEdit(row).saving ? 'Guardando...' : 'Guardar'}
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={() => handleCancelRowEdit(row)}
+                            disabled={
+                              !row.folioDemarcacion ||
+                              !isRowDirty(row) ||
+                              getRowEdit(row).saving
+                            }
+                          >
+                            Cancelar
+                          </Button>
+                        </Box>
+                      </TableCell>
+                    )}
                   </TableRow>
                   {isExpanded && (
                     <TableRow key={`${row.catalogo.id}-expanded`}>
-                      <TableCell colSpan={6} sx={{ p: 0, backgroundColor: '#f5f5f5' }}>
+                      <TableCell colSpan={totalColumns} sx={{ p: 0, backgroundColor: '#f5f5f5' }}>
                         {row.folioDemarcacion ? (
                           <PrecandidatosTable
                             folioId={row.folioDemarcacion.folioId}
                             demarcacionName={row.catalogo.demarcacion}
                             mode="excel"
                             demarcacionStatus={row.status}
+                            allowDocActions={!isValidateMode}
                           />
                         ) : (
                           <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>

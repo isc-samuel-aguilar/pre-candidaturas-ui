@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
@@ -9,6 +9,7 @@ import './index.css'
 export interface RouterAuth {
   isAuthenticated: boolean
   user: { userId: number; username: string; role: string } | null
+  whenReady: () => Promise<void>
 }
 
 export interface RouterContext {
@@ -26,17 +27,33 @@ const router = createRouter({
   context: {
     auth: {
       isAuthenticated: false,
+      whenReady: () => Promise.resolve(),
     },
   },
 })
 
 function InnerApp() {
   const auth = useAuth()
+  const authRef = useRef(auth)
+  authRef.current = auth
+
+  const routerAuth = useMemo<RouterAuth>(
+    () => ({
+      get isAuthenticated() {
+        return authRef.current.isAuthenticated
+      },
+      get user() {
+        return authRef.current.user
+      },
+      whenReady: () => authRef.current.whenReady(),
+    }),
+    []
+  )
 
   return (
     <RouterProvider
       router={router}
-      context={{ auth } as RouterContext}
+      context={{ auth: routerAuth } as RouterContext}
     />
   )
 }

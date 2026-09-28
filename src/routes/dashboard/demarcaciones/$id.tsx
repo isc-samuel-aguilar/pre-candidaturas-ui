@@ -10,36 +10,66 @@ import {
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { getMyFolio, getDemarcacionById } from '../../../services/demarcacionService'
+import { useAuth } from '../../../contexts/AuthContext'
 import type { FolioDemarcacion } from '../../../types/demarcacion'
 import { StatusEnum } from '../../../types/enums'
 import { PrecandidatosTable } from '../../../components/PrecandidatosTable'
 
 export const Route = createFileRoute('/dashboard/demarcaciones/$id')({
+  validateSearch: (search: Record<string, unknown>): { folioId?: number } => ({
+    folioId: search.folioId ? Number(search.folioId) : undefined,
+  }),
   component: DemarcacionDetailPage,
 })
 
 function DemarcacionDetailPage() {
   const { id } = Route.useParams()
+  const { folioId: requestedFolioId } = Route.useSearch()
+  const { user } = useAuth()
   const [demarcacion, setDemarcacion] = useState<FolioDemarcacion | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [precandidatoCount, setPrecandidatoCount] = useState<number | null>(null)
 
   useEffect(() => {
+    if (!user) return
+
+    let cancelled = false
+
     const fetchData = async () => {
       try {
-        const folio = await getMyFolio()
-        const fd = await getDemarcacionById(folio.id, parseInt(id))
-        setDemarcacion(fd)
+        let folioId = requestedFolioId
+        const role = user.role
+
+        if (role === 'ADMIN' || role === 'VALIDATOR') {
+          if (!folioId) {
+            const myFolio = await getMyFolio()
+            folioId = myFolio.id
+          }
+        } else {
+          const myFolio = await getMyFolio()
+          if (folioId && folioId !== myFolio.id) {
+            setError('No tienes permiso para ver este registro')
+            return
+          }
+          folioId = myFolio.id
+        }
+
+        const fd = await getDemarcacionById(folioId, parseInt(id))
+        if (!cancelled) setDemarcacion(fd)
       } catch {
-        setError('No se pudo cargar la información de la demarcación')
+        if (!cancelled) setError('No se pudo cargar la información de la demarcación')
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     fetchData()
-  }, [id])
+
+    return () => {
+      cancelled = true
+    }
+  }, [id, requestedFolioId, user])
 
   const getStatusLabel = (status: string | null) => {
     switch (status) {
@@ -161,6 +191,7 @@ function DemarcacionDetailPage() {
         mode="detail"
         demarcacionStatus={demarcacion.status}
         onCountChange={setPrecandidatoCount}
+        allowDocActions={user?.role !== 'VALIDATOR'}
       />
     </Box>
   )

@@ -6,11 +6,17 @@ import type {
   ExcelImportResult,
 } from '../types/demarcacion'
 import type { Folio } from '../types/folio'
+import type { StatusEnum } from '../types/enums'
 
 export interface DemarcacionError {
   message: string
   status: number
   error?: string
+}
+
+export interface UpdateDemarcacionStatusRequest {
+  status: StatusEnum
+  statusDescription: string | null
 }
 
 function mapApiError(error: ApiError): DemarcacionError {
@@ -92,6 +98,22 @@ export async function getDemarcacionById(
   try {
     const response = await apiClient.get<FolioDemarcacion>(
       `/folios/${folioId}/demarcaciones/${id}`
+    )
+    return response.data
+  } catch (error) {
+    throw mapApiError(error as ApiError)
+  }
+}
+
+export async function updateDemarcacionStatus(
+  folioId: number,
+  id: number,
+  data: UpdateDemarcacionStatusRequest
+): Promise<FolioDemarcacion> {
+  try {
+    const response = await apiClient.put<FolioDemarcacion>(
+      `/folios/${folioId}/demarcaciones/${id}`,
+      data
     )
     return response.data
   } catch (error) {

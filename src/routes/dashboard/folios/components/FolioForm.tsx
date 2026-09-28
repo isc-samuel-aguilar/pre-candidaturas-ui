@@ -151,11 +151,11 @@ export function FolioForm({
       setUserData({
         username: usuarioSuffix,
         password: '',
-        name: editingFolio.user?.name ?? '',
-        lastName: editingFolio.user?.lastName ?? '',
-        motherLastName: editingFolio.user?.motherLastName ?? '',
-        email: editingFolio.user?.email ?? '',
-        phone: editingFolio.user?.phone ?? '',
+        name: '',
+        lastName: '',
+        motherLastName: '',
+        email: '',
+        phone: '',
       })
     } else {
       setFolioData({ ...createEmptyFormData(), folio: defaultFolio })

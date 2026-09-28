@@ -44,6 +44,7 @@ interface PrecandidatosTableProps {
   autoLoad?: boolean
   demarcacionStatus?: DemarcacionStatus
   onCountChange?: (count: number) => void
+  allowDocActions?: boolean
 }
 
 function getStatusLabel(status?: StatusEnum | null) {
@@ -86,6 +87,7 @@ export function PrecandidatosTable({
   autoLoad = true,
   demarcacionStatus,
   onCountChange,
+  allowDocActions = true,
 }: PrecandidatosTableProps) {
   const { token } = useAuth()
   const [precandidatos, setPrecandidatos] = useState<Precandidato[]>([])
@@ -98,7 +100,7 @@ export function PrecandidatosTable({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [documentTypes, setDocumentTypes] = useState<KeyValueCatalog[]>([])
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
-  const isDocsEnabled = demarcacionStatus === StatusEnum.VALIDO
+  const isDocsEnabled = allowDocActions && demarcacionStatus === StatusEnum.VALIDO
 
   const fetchPrecandidatos = useCallback(async () => {
     setLoading(true)
@@ -368,8 +370,8 @@ export function PrecandidatosTable({
                                 <TableRow>
                                   <TableCell>Tipo</TableCell>
                                   <TableCell>Nombre</TableCell>
-                                  <TableCell align="center">Subir</TableCell>
-                                  <TableCell align="center">Eliminar</TableCell>
+                                  {allowDocActions && <TableCell align="center">Subir</TableCell>}
+                                  {allowDocActions && <TableCell align="center">Eliminar</TableCell>}
                                   <TableCell align="center">Status</TableCell>
                                 </TableRow>
                               </TableHead>
@@ -404,40 +406,44 @@ export function PrecandidatosTable({
                                           </Typography>
                                         )}
                                       </TableCell>
-                                      <TableCell align="center">
-                                        <input
-                                          type="file"
-                                          accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
-                                          style={{ display: 'none' }}
-                                          ref={(el) => {
-                                            if (el) fileInputRefs.current.set(uploadKey, el)
-                                          }}
-                                          onChange={(e) => handleFileSelect(precandidatoId, row.catalogType, e.target.files?.[0] || null)}
-                                        />
-                                        <Button
-                                          variant="outlined"
-                                          size="small"
-                                          startIcon={isUploading ? <CircularProgress size={14} /> : <CloudUploadIcon />}
-                                          onClick={() => fileInputRefs.current.get(uploadKey)?.click()}
-                                          disabled={!isDocsEnabled || isUploading || hasFile}
-                                          sx={{ textTransform: 'none' }}
-                                        >
-                                          Subir
-                                        </Button>
-                                      </TableCell>
-                                      <TableCell align="center">
-                                        <Button
-                                          variant="outlined"
-                                          size="small"
-                                          color="error"
-                                          startIcon={<DeleteIcon />}
-                                          disabled={!hasFile || !doc}
-                                          onClick={() => doc && handleDeleteDoc(precandidatoId, doc.id)}
-                                          sx={{ textTransform: 'none' }}
-                                        >
-                                          Eliminar
-                                        </Button>
-                                      </TableCell>
+                                      {allowDocActions && (
+                                        <TableCell align="center">
+                                          <input
+                                            type="file"
+                                            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
+                                            style={{ display: 'none' }}
+                                            ref={(el) => {
+                                              if (el) fileInputRefs.current.set(uploadKey, el)
+                                            }}
+                                            onChange={(e) => handleFileSelect(precandidatoId, row.catalogType, e.target.files?.[0] || null)}
+                                          />
+                                          <Button
+                                            variant="outlined"
+                                            size="small"
+                                            startIcon={isUploading ? <CircularProgress size={14} /> : <CloudUploadIcon />}
+                                            onClick={() => fileInputRefs.current.get(uploadKey)?.click()}
+                                            disabled={!isDocsEnabled || isUploading || hasFile}
+                                            sx={{ textTransform: 'none' }}
+                                          >
+                                            Subir
+                                          </Button>
+                                        </TableCell>
+                                      )}
+                                      {allowDocActions && (
+                                        <TableCell align="center">
+                                          <Button
+                                            variant="outlined"
+                                            size="small"
+                                            color="error"
+                                            startIcon={<DeleteIcon />}
+                                            disabled={!hasFile || !doc}
+                                            onClick={() => doc && handleDeleteDoc(precandidatoId, doc.id)}
+                                            sx={{ textTransform: 'none' }}
+                                          >
+                                            Eliminar
+                                          </Button>
+                                        </TableCell>
+                                      )}
                                       <TableCell align="center">
                                         {hasFile ? (
                                           <Chip

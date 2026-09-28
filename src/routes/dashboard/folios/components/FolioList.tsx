@@ -19,6 +19,7 @@ import {
   Button,
   Chip,
   Alert,
+  Link,
   List,
   ListItem,
   ListItemText,
@@ -27,26 +28,49 @@ import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import SearchIcon from '@mui/icons-material/Search'
 import type { Folio, FolioRepresentation } from '../../../../types/folio'
+import { StatusEnum } from '../../../../types/enums'
+
+const STATUS_STYLES: Record<string, { label: string; bg: string; color: string }> = {
+  [StatusEnum.POR_VALIDAR]: { label: 'Por Validar', bg: '#FFD100', color: '#000000' },
+  [StatusEnum.VALIDO]: { label: 'Válido', bg: '#4CAF50', color: '#FFFFFF' },
+  [StatusEnum.ERROR]: { label: 'Error', bg: '#F44336', color: '#FFFFFF' },
+}
+
+const DEFAULT_STATUS_STYLE = { label: 'Sin cargar', bg: '#E0E0E0', color: '#757575' }
+
+function getStatusStyle(status: StatusEnum | null) {
+  return (status && STATUS_STYLES[status]) || DEFAULT_STATUS_STYLE
+}
 
 interface FolioListProps {
   folios: Folio[]
   loading: boolean
   error: string | null
-  onEdit: (folio: Folio) => void
-  onDelete: (id: number) => Promise<void>
+  onEdit?: (folio: Folio) => void
+  onDelete?: (id: number) => Promise<void>
+  showActions?: boolean
 }
 
 function getFullName(rep: FolioRepresentation): string {
   return `${rep.paternalLastName} ${rep.maternalLastName} ${rep.name}`
 }
 
-export function FolioList({ folios, loading, error, onEdit, onDelete }: FolioListProps) {
+export function FolioList({
+  folios,
+  loading,
+  error,
+  onEdit,
+  onDelete,
+  showActions = true,
+}: FolioListProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [folioToDelete, setFolioToDelete] = useState<Folio | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [reprDialogOpen, setReprDialogOpen] = useState(false)
   const [reprFolio, setReprFolio] = useState<Folio | null>(null)
+
+  const totalColumns = 7 + (showActions ? 1 : 0)
 
   const sortedFolios = useMemo(() => {
     return [...folios].sort((a, b) => {
@@ -77,7 +101,7 @@ export function FolioList({ folios, loading, error, onEdit, onDelete }: FolioLis
   const handleDeleteConfirm = async () => {
     if (!folioToDelete) return
     setDeleting(true)
-    await onDelete(folioToDelete.id)
+    await onDelete?.(folioToDelete.id)
     setDeleting(false)
     setDeleteDialogOpen(false)
     setFolioToDelete(null)
@@ -134,20 +158,21 @@ export function FolioList({ folios, loading, error, onEdit, onDelete }: FolioLis
               <TableCell>Municipio</TableCell>
               <TableCell>Estado</TableCell>
               <TableCell>Representaciones</TableCell>
-              <TableCell align="right">Acciones</TableCell>
+              <TableCell>Status</TableCell>
+              {showActions && <TableCell align="right">Acciones</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
             {loading && (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={totalColumns} align="center">
                   Cargando...
                 </TableCell>
               </TableRow>
             )}
             {!loading && filteredFolios.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={totalColumns} align="center">
                   {searchTerm
                     ? 'No se encontraron folios con ese criterio de búsqueda'
                     : 'No hay folios registrados'}
@@ -161,7 +186,20 @@ export function FolioList({ folios, loading, error, onEdit, onDelete }: FolioLis
                     {folio.folio}
                   </Typography>
                 </TableCell>
-                <TableCell>{folio.user?.username ?? folio.userId}</TableCell>
+                <TableCell>
+                  {folio.user?.username ? (
+                    <Link
+                      href={`/dashboard/excel/${encodeURIComponent(folio.user.username)}`}
+                      target="_blank"
+                      rel="opener"
+                      underline="hover"
+                    >
+                      {folio.user.username}
+                    </Link>
+                  ) : (
+                    folio.userId
+                  )}
+                </TableCell>
                 <TableCell>{folio.email}</TableCell>
                 <TableCell>{folio.municipio}</TableCell>
                 <TableCell>{folio.estado}</TableCell>
@@ -184,22 +222,35 @@ export function FolioList({ folios, loading, error, onEdit, onDelete }: FolioLis
                     ))}
                   </Box>
                 </TableCell>
-                <TableCell align="right">
-                  <Tooltip title="Editar">
-                    <IconButton size="small" onClick={() => onEdit(folio)}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Eliminar">
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => handleDeleteClick(folio)}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                <TableCell>
+                  <Chip
+                    label={getStatusStyle(folio.status).label}
+                    size="small"
+                    sx={{
+                      backgroundColor: getStatusStyle(folio.status).bg,
+                      color: getStatusStyle(folio.status).color,
+                      fontWeight: 'bold',
+                    }}
+                  />
                 </TableCell>
+                {showActions && (
+                  <TableCell align="right">
+                    <Tooltip title="Editar">
+                      <IconButton size="small" onClick={() => onEdit?.(folio)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Eliminar">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => handleDeleteClick(folio)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

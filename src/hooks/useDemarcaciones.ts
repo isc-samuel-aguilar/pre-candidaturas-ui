@@ -8,16 +8,23 @@ import type {
 import type { Folio } from '../types/folio'
 import type { DemarcacionError } from '../services/demarcacionService'
 import { StatusEnum } from '../types/enums'
+import { getFoliosByUser } from '../services/folioService'
 import {
   getMyFolio,
   getCatalogoDemarcaciones,
   getDemarcacionesByFolio,
   createDemarcacion,
   deleteDemarcacion,
+  updateDemarcacionStatus,
   uploadExcel,
 } from '../services/demarcacionService'
 
-export function useDemarcaciones() {
+interface UseDemarcacionesOptions {
+  userName?: string
+}
+
+export function useDemarcaciones(options?: UseDemarcacionesOptions) {
+  const userName = options?.userName
   const [folio, setFolio] = useState<Folio | null>(null)
   const [catalogo, setCatalogo] = useState<DemarcacionCatalogo[]>([])
   const [folioDemarcaciones, setFolioDemarcaciones] = useState<FolioDemarcacion[]>([])
@@ -52,7 +59,7 @@ export function useDemarcaciones() {
 
     try {
       const [folioData, catalogoData] = await Promise.all([
-        getMyFolio(),
+        userName ? getFoliosByUser(userName) : getMyFolio(),
         getCatalogoDemarcaciones(),
       ])
 
@@ -68,7 +75,7 @@ export function useDemarcaciones() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [userName])
 
   const handleUpload = useCallback(
     async (demarcacion: DemarcacionCatalogo, file: File) => {
@@ -119,6 +126,30 @@ export function useDemarcaciones() {
     [folio]
   )
 
+  const updateStatus = useCallback(
+    async (
+      folioDemarcacion: FolioDemarcacion,
+      status: StatusEnum,
+      statusDescription: string | null
+    ) => {
+      setError(null)
+
+      try {
+        await updateDemarcacionStatus(folioDemarcacion.folioId, folioDemarcacion.id, {
+          status,
+          statusDescription,
+        })
+
+        const fdData = await getDemarcacionesByFolio(folioDemarcacion.folioId)
+        setFolioDemarcaciones(fdData)
+      } catch (err) {
+        setError(err as DemarcacionError)
+        throw err
+      }
+    },
+    []
+  )
+
   const demarcaciones = mergeDemarcaciones(catalogo, folioDemarcaciones)
 
   const getStatusColor = (status: DemarcacionStatus) => {
@@ -143,6 +174,7 @@ export function useDemarcaciones() {
     fetchData,
     handleUpload,
     handleDelete,
+    updateStatus,
     getStatusColor,
   }
 }

@@ -58,6 +58,17 @@ export async function getFolioByFolio(folio: string): Promise<Folio> {
   }
 }
 
+export async function getFoliosByUser(userName: string): Promise<Folio> {
+  try {
+    const response = await apiClient.get<Folio>(
+      `/folios/by-user/${encodeURIComponent(userName)}`
+    )
+    return response.data
+  } catch (error) {
+    throw mapApiError(error as ApiError)
+  }
+}
+
 export async function createFolio(data: CreateFolioRequest): Promise<Folio> {
   try {
     const response = await apiClient.post<Folio>('/folios', data)
