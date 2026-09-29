@@ -5,6 +5,7 @@ import {
   uploadDocument,
   deleteDocument,
   downloadDocumentFile,
+  updateDocumentStatus,
 } from './documentService'
 import type { Documento, KeyValueCatalog } from '../types/demarcacion'
 import { StatusEnum } from '../types/enums'
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   put: vi.fn(),
+  patch: vi.fn(),
   delete: vi.fn(),
 }))
 
@@ -21,6 +23,7 @@ vi.mock('./apiClient', () => ({
     get: mocks.get,
     post: mocks.post,
     put: mocks.put,
+    patch: mocks.patch,
     delete: mocks.delete,
   },
   authClient: {},
@@ -145,6 +148,63 @@ describe('deleteDocument', () => {
     await deleteDocument(10)
 
     expect(mocks.delete).toHaveBeenCalledWith('/documents/10')
+  })
+})
+
+describe('updateDocumentStatus', () => {
+  beforeEach(() => {
+    mocks.patch.mockReset()
+  })
+
+  it('patches the document status with the comment', async () => {
+    const updated = { ...sampleDocument, status: StatusEnum.VALIDO, statusDescription: 'OK' }
+    mocks.patch.mockResolvedValue({ data: updated, status: 200, ok: true })
+
+    const result = await updateDocumentStatus(10, {
+      status: StatusEnum.VALIDO,
+      statusDescription: 'OK',
+    })
+
+    expect(mocks.patch).toHaveBeenCalledWith('/documents/10', {
+      status: StatusEnum.VALIDO,
+      statusDescription: 'OK',
+    })
+    expect(result).toEqual(updated)
+  })
+
+  it('omits statusDescription from the body when not provided (partial PATCH)', async () => {
+    const updated = { ...sampleDocument, status: StatusEnum.ERROR }
+    mocks.patch.mockResolvedValue({ data: updated, status: 200, ok: true })
+
+    await updateDocumentStatus(10, { status: StatusEnum.ERROR })
+
+    expect(mocks.patch).toHaveBeenCalledWith('/documents/10', {
+      status: StatusEnum.ERROR,
+    })
+  })
+
+  it('sends an empty string to clear a previously stored comment', async () => {
+    const updated = { ...sampleDocument, statusDescription: '' }
+    mocks.patch.mockResolvedValue({ data: updated, status: 200, ok: true })
+
+    await updateDocumentStatus(10, { status: StatusEnum.VALIDO, statusDescription: '' })
+
+    expect(mocks.patch).toHaveBeenCalledWith('/documents/10', {
+      status: StatusEnum.VALIDO,
+      statusDescription: '',
+    })
+  })
+
+  it('maps API errors to DocumentError (VALIDATOR forbidden while backend pending)', async () => {
+    mocks.patch.mockRejectedValue({ message: 'Prohibido', status: 403 })
+
+    await expect(
+      updateDocumentStatus(10, { status: StatusEnum.VALIDO })
+    ).rejects.toEqual({
+      message: 'Prohibido',
+      status: 403,
+      error: undefined,
+    })
   })
 })
 

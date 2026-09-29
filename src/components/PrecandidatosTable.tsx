@@ -14,6 +14,9 @@ import {
   Chip,
   IconButton,
   Alert,
+  Snackbar,
+  TextField,
+  MenuItem,
 } from '@mui/material'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
@@ -26,6 +29,8 @@ import {
   uploadDocument,
   deleteDocument,
   downloadDocumentFile,
+  updateDocumentStatus,
+  type UpdateDocumentStatusPayload,
 } from '../services/documentService'
 import { useAuth } from '../contexts/AuthContext'
 import type { Precandidato, DemarcacionStatus, Documento, KeyValueCatalog } from '../types/demarcacion'
@@ -37,6 +42,12 @@ interface DocumentRow {
   document: Documento | null
 }
 
+interface DocEditState {
+  status: StatusEnum | ''
+  comment: string
+  saving: boolean
+}
+
 interface PrecandidatosTableProps {
   folioId: number
   demarcacionName: string
@@ -45,6 +56,7 @@ interface PrecandidatosTableProps {
   demarcacionStatus?: DemarcacionStatus
   onCountChange?: (count: number) => void
   allowDocActions?: boolean
+  allowDocValidation?: boolean
 }
 
 function getStatusLabel(status?: StatusEnum | null) {
@@ -88,6 +100,7 @@ export function PrecandidatosTable({
   demarcacionStatus,
   onCountChange,
   allowDocActions = true,
+  allowDocValidation = false,
 }: PrecandidatosTableProps) {
   const { token } = useAuth()
   const [precandidatos, setPrecandidatos] = useState<Precandidato[]>([])
@@ -98,9 +111,17 @@ export function PrecandidatosTable({
   const [loadingDocs, setLoadingDocs] = useState<Set<number>>(new Set())
   const [uploadingDocs, setUploadingDocs] = useState<Set<string>>(new Set())
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [docsErrorIds, setDocsErrorIds] = useState<Set<number>>(new Set())
+  const [docEdits, setDocEdits] = useState<Map<string, DocEditState>>(new Map())
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean
+    message: string
+    severity: 'success' | 'error'
+  }>({ open: false, message: '', severity: 'success' })
   const [documentTypes, setDocumentTypes] = useState<KeyValueCatalog[]>([])
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
-  const isDocsEnabled = allowDocActions && demarcacionStatus === StatusEnum.VALIDO
+  const isDocsEnabled =
+    (allowDocActions || allowDocValidation) && demarcacionStatus === StatusEnum.VALIDO
 
   const fetchPrecandidatos = useCallback(async () => {
     setLoading(true)
@@ -133,13 +154,18 @@ export function PrecandidatosTable({
       try {
         const existingDocs = await getDocumentsByPrecandidato(precandidatoId)
         setDocumentsMap((prev) => new Map(prev).set(precandidatoId, mergeDocs(documentTypes, existingDocs)))
+        setDocsErrorIds((prev) => {
+          const next = new Set(prev)
+          next.delete(precandidatoId)
+          return next
+        })
       } catch {
-        setDocumentsMap((prev) =>
-          new Map(prev).set(
-            precandidatoId,
-            documentTypes.map((t) => ({ catalogType: t.value, document: null }))
-          )
-        )
+        setDocumentsMap((prev) => {
+          const next = new Map(prev)
+          next.delete(precandidatoId)
+          return next
+        })
+        setDocsErrorIds((prev) => new Set(prev).add(precandidatoId))
       }
     },
     [documentTypes]
@@ -159,15 +185,7 @@ export function PrecandidatosTable({
     if (!documentsMap.has(precandidatoId) && !loadingDocs.has(precandidatoId)) {
       setLoadingDocs((prev) => new Set(prev).add(precandidatoId))
       try {
-        const existingDocs = await getDocumentsByPrecandidato(precandidatoId)
-        setDocumentsMap((prev) => new Map(prev).set(precandidatoId, mergeDocs(documentTypes, existingDocs)))
-      } catch {
-        setDocumentsMap((prev) =>
-          new Map(prev).set(
-            precandidatoId,
-            documentTypes.map((t) => ({ catalogType: t.value, document: null }))
-          )
-        )
+        await refreshDocs(precandidatoId)
       } finally {
         setLoadingDocs((prev) => {
           const next = new Set(prev)
@@ -175,6 +193,89 @@ export function PrecandidatosTable({
           return next
         })
       }
+    }
+  }
+
+  const getDocEditKey = (precandidatoId: number, catalogType: string) =>
+    `${precandidatoId}-${catalogType}`
+
+  const getInitialDocStatus = (doc: Documento | null): StatusEnum | '' => {
+    if (doc?.status === StatusEnum.VALIDO || doc?.status === StatusEnum.ERROR) {
+      return doc.status
+    }
+    return ''
+  }
+
+  const getInitialDocEdit = (doc: Documento | null): DocEditState => ({
+    status: getInitialDocStatus(doc),
+    comment: doc?.statusDescription ?? '',
+    saving: false,
+  })
+
+  const getDocEdit = (key: string, doc: Documento | null): DocEditState =>
+    docEdits.get(key) ?? getInitialDocEdit(doc)
+
+  const patchDocEdit = (key: string, doc: Documento | null, patch: Partial<DocEditState>) => {
+    setDocEdits(
+      (prev) => new Map(prev).set(key, { ...(prev.get(key) ?? getInitialDocEdit(doc)), ...patch })
+    )
+  }
+
+  const cancelDocEdit = (key: string) => {
+    setDocEdits((prev) => {
+      const next = new Map(prev)
+      next.delete(key)
+      return next
+    })
+  }
+
+  const isDocEditDirty = (key: string, doc: Documento | null) => {
+    const edit = getDocEdit(key, doc)
+    return (
+      doc !== null &&
+      (edit.status !== getInitialDocStatus(doc) ||
+        edit.comment !== (doc.statusDescription ?? ''))
+    )
+  }
+
+  const handleSaveDocStatus = async (
+    precandidatoId: number,
+    key: string,
+    doc: Documento | null
+  ) => {
+    if (!doc) return
+    const edit = getDocEdit(key, doc)
+    if (!edit.status) return
+
+    const payload: UpdateDocumentStatusPayload = { status: edit.status }
+    if (edit.comment !== (doc.statusDescription ?? '')) {
+      payload.statusDescription = edit.comment
+    }
+
+    patchDocEdit(key, doc, { saving: true })
+
+    try {
+      await updateDocumentStatus(doc.id, payload)
+      cancelDocEdit(key)
+      await refreshDocs(precandidatoId)
+      setSnackbar({
+        open: true,
+        message: 'Documento actualizado correctamente',
+        severity: 'success',
+      })
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: (err as { message?: string }).message || 'Error al guardar los cambios',
+        severity: 'error',
+      })
+    } finally {
+      setDocEdits((prev) => {
+        if (!prev.has(key)) return prev
+        const next = new Map(prev)
+        next.set(key, { ...prev.get(key)!, saving: false })
+        return next
+      })
     }
   }
 
@@ -310,6 +411,7 @@ export function PrecandidatosTable({
               const isExpanded = expandedPrecandidato === precandidatoId
               const merged = documentsMap.get(precandidatoId)
               const isLoadingDocs = loadingDocs.has(precandidatoId)
+              const hasDocsError = docsErrorIds.has(precandidatoId)
 
               return (
                 <>
@@ -364,6 +466,10 @@ export function PrecandidatosTable({
                             <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
                               <CircularProgress size={20} />
                             </Box>
+                          ) : hasDocsError ? (
+                            <Alert severity="warning" sx={{ mt: 1 }}>
+                              No se pudieron cargar los documentos
+                            </Alert>
                           ) : merged && merged.length > 0 ? (
                             <Table size="small">
                               <TableHead>
@@ -373,6 +479,13 @@ export function PrecandidatosTable({
                                   {allowDocActions && <TableCell align="center">Subir</TableCell>}
                                   {allowDocActions && <TableCell align="center">Eliminar</TableCell>}
                                   <TableCell align="center">Status</TableCell>
+                                  {allowDocValidation && (
+                                    <TableCell align="center">Validar</TableCell>
+                                  )}
+                                  {allowDocValidation && <TableCell>Comentario</TableCell>}
+                                  {allowDocValidation && (
+                                    <TableCell align="center">Acciones</TableCell>
+                                  )}
                                 </TableRow>
                               </TableHead>
                               <TableBody>
@@ -380,6 +493,7 @@ export function PrecandidatosTable({
                                   const doc = row.document
                                   const status = doc?.status ?? null
                                   const uploadKey = `${precandidatoId}-${row.catalogType}`
+                                  const editKey = getDocEditKey(precandidatoId, row.catalogType)
                                   const isUploading = uploadingDocs.has(uploadKey)
                                   const hasFile = doc !== null
 
@@ -471,6 +585,98 @@ export function PrecandidatosTable({
                                           />
                                         )}
                                       </TableCell>
+                                      {allowDocValidation && (
+                                        <TableCell align="center">
+                                          {hasFile && doc ? (
+                                            <TextField
+                                              select
+                                              size="small"
+                                              label="Validar"
+                                              value={getDocEdit(editKey, doc).status}
+                                              disabled={getDocEdit(editKey, doc).saving}
+                                              onChange={(e) =>
+                                                patchDocEdit(editKey, doc, {
+                                                  status: e.target.value as StatusEnum | '',
+                                                })
+                                              }
+                                              sx={{ minWidth: 120 }}
+                                            >
+                                              <MenuItem value="">
+                                                <em>Seleccionar</em>
+                                              </MenuItem>
+                                              <MenuItem value={StatusEnum.VALIDO}>Válido</MenuItem>
+                                              <MenuItem value={StatusEnum.ERROR}>Error</MenuItem>
+                                            </TextField>
+                                          ) : (
+                                            <Typography variant="body2" color="text.secondary">
+                                              -
+                                            </Typography>
+                                          )}
+                                        </TableCell>
+                                      )}
+                                      {allowDocValidation && (
+                                        <TableCell>
+                                          {hasFile && doc ? (
+                                            <TextField
+                                              size="small"
+                                              fullWidth
+                                              multiline
+                                              maxRows={3}
+                                              placeholder="Comentario..."
+                                              value={getDocEdit(editKey, doc).comment}
+                                              disabled={getDocEdit(editKey, doc).saving}
+                                              onChange={(e) =>
+                                                patchDocEdit(editKey, doc, {
+                                                  comment: e.target.value,
+                                                })
+                                              }
+                                            />
+                                          ) : (
+                                            <Typography variant="body2" color="text.secondary">
+                                              -
+                                            </Typography>
+                                          )}
+                                        </TableCell>
+                                      )}
+                                      {allowDocValidation && (
+                                        <TableCell align="center">
+                                          <Box
+                                            sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}
+                                          >
+                                            <Button
+                                              variant="contained"
+                                              size="small"
+                                              onClick={() =>
+                                                handleSaveDocStatus(precandidatoId, editKey, doc)
+                                              }
+                                              disabled={
+                                                !hasFile ||
+                                                !doc ||
+                                                !getDocEdit(editKey, doc).status ||
+                                                !isDocEditDirty(editKey, doc) ||
+                                                getDocEdit(editKey, doc).saving
+                                              }
+                                              sx={{ textTransform: 'none' }}
+                                            >
+                                              {getDocEdit(editKey, doc).saving
+                                                ? 'Guardando...'
+                                                : 'Guardar'}
+                                            </Button>
+                                            <Button
+                                              variant="outlined"
+                                              size="small"
+                                              onClick={() => cancelDocEdit(editKey)}
+                                              disabled={
+                                                !isDocEditDirty(editKey, doc) ||
+                                                getDocEdit(editKey, doc).saving
+                                              }
+                                              sx={{ textTransform: 'none' }}
+                                            >
+                                              Cancelar
+                                            </Button>
+                                          </Box>
+                                        </TableCell>
+                                      )}
                                     </TableRow>
                                   )
                                 })}
@@ -491,6 +697,20 @@ export function PrecandidatosTable({
           </TableBody>
         </Table>
       </TableContainer>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   )
 }

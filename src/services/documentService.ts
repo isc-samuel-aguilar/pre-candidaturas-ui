@@ -1,10 +1,16 @@
 import { apiClient, type ApiError } from './apiClient'
 import type { Documento, KeyValueCatalog } from '../types/demarcacion'
+import type { StatusEnum } from '../types/enums'
 
 export interface DocumentError {
   message: string
   status: number
   error?: string
+}
+
+export interface UpdateDocumentStatusPayload {
+  status: StatusEnum
+  statusDescription?: string
 }
 
 function mapApiError(error: ApiError): DocumentError {
@@ -92,6 +98,18 @@ export async function uploadDocument(
 export async function deleteDocument(documentId: number): Promise<void> {
   try {
     await apiClient.delete(`/documents/${documentId}`)
+  } catch (error) {
+    throw mapApiError(error as ApiError)
+  }
+}
+
+export async function updateDocumentStatus(
+  documentId: number,
+  payload: UpdateDocumentStatusPayload
+): Promise<Documento> {
+  try {
+    const response = await apiClient.patch<Documento>(`/documents/${documentId}`, payload)
+    return response.data
   } catch (error) {
     throw mapApiError(error as ApiError)
   }

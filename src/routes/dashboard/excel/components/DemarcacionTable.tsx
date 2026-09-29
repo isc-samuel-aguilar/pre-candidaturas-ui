@@ -456,6 +456,7 @@ export function DemarcacionTable({
                             mode="excel"
                             demarcacionStatus={row.status}
                             allowDocActions={!isValidateMode}
+                            allowDocValidation={isValidateMode}
                           />
                         ) : (
                           <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>

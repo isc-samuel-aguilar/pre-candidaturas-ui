@@ -82,6 +82,7 @@ export interface Documento {
   keyValueCatalogValue: string
   keyValueCatalogDescription: string
   status: StatusEnum | null
+  statusDescription?: string | null
   bucketName: string | null
   objectKey: string | null
   originalFilename?: string | null
