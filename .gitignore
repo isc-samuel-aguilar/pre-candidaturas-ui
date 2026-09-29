@@ -46,3 +46,11 @@ docs/
 #AGENTS.md
 env-*.env
 .env.*
+# OpenCode local commands
+.opencode/
+
+# OpenCode project config (local)
+opencode.json
+
+# Temp (E2E/test artifacts)
+.tmp/

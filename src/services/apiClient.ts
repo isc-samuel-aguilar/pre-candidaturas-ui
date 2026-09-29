@@ -132,6 +132,10 @@ class ApiClient {
     return this.request<T>('PUT', endpoint, body, options)
   }
 
+  async patch<T>(endpoint: string, body?: unknown, options?: RequestOptions): Promise<ApiResponse<T>> {
+    return this.request<T>('PATCH', endpoint, body, options)
+  }
+
   async delete<T>(endpoint: string, options?: RequestOptions): Promise<ApiResponse<T>> {
     return this.request<T>('DELETE', endpoint, undefined, options)
   }
