@@ -27,7 +27,7 @@ Frontend React para el sistema de registro de precandidatos del partido PRD.
 ```bash
 # Clonar el repositorio
 git clone <repository-url>
-cd precandidaturas-ui
+cd pre-candidaturas-ui
 
 # Instalar dependencias
 pnpm install
@@ -117,7 +117,7 @@ pnpm typecheck    # Verificar tipos TypeScript
 ## Estructura del Proyecto
 
 ```
-precandidaturas-ui/
+pre-candidaturas-ui/
   src/
     routes/              # Paginas (TanStack Router file-based)
     components/          # Componentes compartidos
@@ -140,7 +140,7 @@ El frontend se conecta al backend de Precandidaturas:
 - **Auth API**: `http://localhost:9001/api/v1/auth` (login, usuarios)
 - **Main API**: `http://localhost:9002/api/v1` (precandidatos, documentos)
 
-Consultar `../precandidaturas-backend/AGENTS.md` para documentacion del backend.
+Consultar `../pre-candidaturas-backend/AGENTS.md` para documentacion del backend.
 
 ## Colores PRD
 

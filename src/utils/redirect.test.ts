@@ -34,6 +34,12 @@ describe('resolvePostLoginRoute', () => {
     expect(resolvePostLoginRoute('/login?redirect=%2Fdashboard', 'ADMIN')).toBe('/dashboard/folios')
   })
 
+  it('falls back when the redirect is the root path, which has no route', () => {
+    expect(resolvePostLoginRoute('/', 'ADMIN')).toBe('/dashboard/folios')
+    expect(resolvePostLoginRoute('/', undefined)).toBe('/dashboard/folios')
+    expect(resolvePostLoginRoute('/?tab=1', 'REGISTER')).toBe('/dashboard/excel')
+  })
+
   it('uses excel fallback for REGISTER even with an invalid redirect', () => {
     expect(resolvePostLoginRoute('https://evil.example', 'REGISTER')).toBe('/dashboard/excel')
   })

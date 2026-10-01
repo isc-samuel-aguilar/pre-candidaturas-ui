@@ -25,7 +25,7 @@ interface AuthContextType {
   whenReady: () => Promise<void>
 }
 
-const SESSION_KEY = 'precandidaturas_session'
+const SESSION_KEY = 'pre-candidaturas_session'
 const TOKEN_EXPIRY_HOURS = 8
 
 function getSessionFromStorage(): SessionData | null {

@@ -10,7 +10,7 @@ export function resolvePostLoginRoute(redirect: string | undefined, role: string
   }
 
   const pathname = redirect.split(/[?#]/)[0] ?? ''
-  if (pathname === LOGIN_PATH) {
+  if (pathname === LOGIN_PATH || pathname === '/') {
     return fallback
   }
 
