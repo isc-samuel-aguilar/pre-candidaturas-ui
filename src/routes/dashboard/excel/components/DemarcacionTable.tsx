@@ -477,6 +477,7 @@ export function DemarcacionTable({
                             demarcacionStatus={row.status}
                             allowDocActions={!isValidateMode}
                             allowDocValidation={isValidateMode}
+                            groupDocuments
                           />
                         ) : (
                           <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>

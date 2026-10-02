@@ -26,10 +26,12 @@ import { getPrecandidatos } from '../services/demarcacionService'
 import {
   getDocumentsByPrecandidato,
   getDocumentTypes,
+  getGeneratedDocumentTypes,
   uploadDocument,
   deleteDocument,
   downloadDocumentFile,
   updateDocumentStatus,
+  GENERATED_DOCUMENT_KEY,
   type UpdateDocumentStatusPayload,
 } from '../services/documentService'
 import { useAuth } from '../contexts/AuthContext'
@@ -57,7 +59,10 @@ interface PrecandidatosTableProps {
   onCountChange?: (count: number) => void
   allowDocActions?: boolean
   allowDocValidation?: boolean
+  groupDocuments?: boolean
 }
+
+type DocRowKey = 'validate' | 'sign'
 
 function getStatusLabel(status?: StatusEnum | null) {
   switch (status) {
@@ -101,6 +106,11 @@ function mergeDocs(documentTypes: KeyValueCatalog[], existingDocs: Documento[]):
   })
 }
 
+function areAllDocsValid(rows: DocumentRow[] | undefined): boolean {
+  if (!rows) return false
+  return rows.every((row) => row.document !== null && row.document.status === StatusEnum.VALIDO)
+}
+
 export function PrecandidatosTable({
   folioId,
   demarcacionName,
@@ -110,13 +120,16 @@ export function PrecandidatosTable({
   onCountChange,
   allowDocActions = true,
   allowDocValidation = false,
+  groupDocuments = false,
 }: PrecandidatosTableProps) {
   const { token } = useAuth()
   const [precandidatos, setPrecandidatos] = useState<Precandidato[]>([])
   const [loading, setLoading] = useState(autoLoad)
   const [error, setError] = useState<string | null>(null)
   const [expandedPrecandidato, setExpandedPrecandidato] = useState<number | null>(null)
+  const [expandedDocRow, setExpandedDocRow] = useState<DocRowKey | null>(null)
   const [documentsMap, setDocumentsMap] = useState<Map<number, DocumentRow[]>>(new Map())
+  const [rawDocsMap, setRawDocsMap] = useState<Map<number, Documento[]>>(new Map())
   const [loadingDocs, setLoadingDocs] = useState<Set<number>>(new Set())
   const [uploadingDocs, setUploadingDocs] = useState<Set<string>>(new Set())
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -125,9 +138,12 @@ export function PrecandidatosTable({
   const [snackbar, setSnackbar] = useState<{
     open: boolean
     message: string
-    severity: 'success' | 'error'
+    severity: 'success' | 'error' | 'info'
   }>({ open: false, message: '', severity: 'success' })
   const [documentTypes, setDocumentTypes] = useState<KeyValueCatalog[]>([])
+  const [generatedTypes, setGeneratedTypes] = useState<KeyValueCatalog[] | null>(null)
+  const [loadingGeneratedTypes, setLoadingGeneratedTypes] = useState(false)
+  const [generatedTypesError, setGeneratedTypesError] = useState(false)
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
   const isDocsEnabled =
     (allowDocActions || allowDocValidation) && demarcacionStatus === StatusEnum.VALIDO
@@ -162,6 +178,7 @@ export function PrecandidatosTable({
     async (precandidatoId: number) => {
       try {
         const existingDocs = await getDocumentsByPrecandidato(precandidatoId)
+        setRawDocsMap((prev) => new Map(prev).set(precandidatoId, existingDocs))
         setDocumentsMap((prev) => new Map(prev).set(precandidatoId, mergeDocs(documentTypes, existingDocs)))
         setDocsErrorIds((prev) => {
           const next = new Set(prev)
@@ -169,6 +186,11 @@ export function PrecandidatosTable({
           return next
         })
       } catch {
+        setRawDocsMap((prev) => {
+          const next = new Map(prev)
+          next.delete(precandidatoId)
+          return next
+        })
         setDocumentsMap((prev) => {
           const next = new Map(prev)
           next.delete(precandidatoId)
@@ -184,6 +206,8 @@ export function PrecandidatosTable({
     `${p.apellidoPaterno} ${p.apellidoMaterno} ${p.nombre}`.trim()
 
   const handleTogglePrecandidato = async (precandidatoId: number) => {
+    setExpandedDocRow(null)
+
     if (expandedPrecandidato === precandidatoId) {
       setExpandedPrecandidato(null)
       return
@@ -203,6 +227,32 @@ export function PrecandidatosTable({
         })
       }
     }
+  }
+
+  const handleToggleDocRow = async (row: DocRowKey) => {
+    if (row === 'sign') {
+      const merged = expandedPrecandidato !== null ? documentsMap.get(expandedPrecandidato) : undefined
+      if (!areAllDocsValid(merged)) return
+
+      if (generatedTypes === null && !loadingGeneratedTypes) {
+        setGeneratedTypesError(false)
+        setLoadingGeneratedTypes(true)
+        try {
+          const types = await getGeneratedDocumentTypes()
+          setGeneratedTypes(types)
+        } catch {
+          setGeneratedTypesError(true)
+        } finally {
+          setLoadingGeneratedTypes(false)
+        }
+      }
+    }
+
+    setExpandedDocRow((prev) => (prev === row ? null : row))
+  }
+
+  const handleDownloadForSign = () => {
+    setSnackbar({ open: true, message: 'funcionalidad no implementada', severity: 'info' })
   }
 
   const getDocEditKey = (precandidatoId: number, catalogType: string) =>
@@ -289,7 +339,12 @@ export function PrecandidatosTable({
     }
   }
 
-  const handleFileSelect = async (precandidatoId: number, docType: string, file: File | null) => {
+  const handleFileSelect = async (
+    precandidatoId: number,
+    docType: string,
+    file: File | null,
+    catalogKey?: string
+  ) => {
     if (!file) return
 
     setUploadError(null)
@@ -314,7 +369,7 @@ export function PrecandidatosTable({
     setUploadingDocs((prev) => new Set(prev).add(uploadKey))
 
     try {
-      await uploadDocument(precandidatoId, docType, finalFile)
+      await uploadDocument(precandidatoId, docType, finalFile, catalogKey)
       await refreshDocs(precandidatoId)
     } catch {
       // error handled by parent
@@ -371,6 +426,343 @@ export function PrecandidatosTable({
   // 10 (excel) / 30 (detail): coincide con el nº real de celdas desde que se añadió
   // "Docs Válidos" (antes había drift: 9/29 celdas frente a colSpan 10/30)
   const totalColumns = isDetailMode ? 30 : 10
+
+  const renderDocsTable = (rows: DocumentRow[], precandidatoId: number, showSignColumn: boolean) => (
+    <Table size="small">
+      <TableHead>
+        <TableRow>
+          <TableCell>Tipo</TableCell>
+          {showSignColumn && <TableCell align="center">Descargar para firmar</TableCell>}
+          <TableCell>Nombre</TableCell>
+          {allowDocActions && <TableCell align="center">Subir</TableCell>}
+          {allowDocActions && <TableCell align="center">Eliminar</TableCell>}
+          <TableCell align="center">Status</TableCell>
+          {allowDocValidation && (
+            <TableCell align="center">Validar</TableCell>
+          )}
+          {allowDocValidation && <TableCell>Comentario</TableCell>}
+          {allowDocValidation && (
+            <TableCell align="center">Acciones</TableCell>
+          )}
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {rows.map((row) => {
+          const doc = row.document
+          const status = doc?.status ?? null
+          const uploadKey = `${precandidatoId}-${row.catalogType}`
+          const editKey = getDocEditKey(precandidatoId, row.catalogType)
+          const isUploading = uploadingDocs.has(uploadKey)
+          const hasFile = doc !== null
+
+          return (
+            <TableRow key={row.catalogType} hover>
+              <TableCell>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  {row.catalogType}
+                </Typography>
+              </TableCell>
+              {showSignColumn && (
+                <TableCell align="center">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleDownloadForSign}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Descargar y firmar
+                  </Button>
+                </TableCell>
+              )}
+              <TableCell>
+                {hasFile ? (
+                  <Button
+                    variant="text"
+                    size="small"
+                    onClick={() => doc && token && downloadDocumentFile(doc, token)}
+                    sx={{ textTransform: 'none', color: 'primary.main', justifyContent: 'flex-start' }}
+                  >
+                    {doc?.originalFilename || row.catalogType}
+                  </Button>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    -
+                  </Typography>
+                )}
+              </TableCell>
+              {allowDocActions && (
+                <TableCell align="center">
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
+                    style={{ display: 'none' }}
+                    ref={(el) => {
+                      if (el) fileInputRefs.current.set(uploadKey, el)
+                    }}
+                    onChange={(e) =>
+                      handleFileSelect(
+                        precandidatoId,
+                        row.catalogType,
+                        e.target.files?.[0] || null,
+                        showSignColumn ? GENERATED_DOCUMENT_KEY : undefined
+                      )
+                    }
+                  />
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={isUploading ? <CircularProgress size={14} /> : <CloudUploadIcon />}
+                    onClick={() => fileInputRefs.current.get(uploadKey)?.click()}
+                    disabled={!isDocsEnabled || isUploading || hasFile}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Subir
+                  </Button>
+                </TableCell>
+              )}
+              {allowDocActions && (
+                <TableCell align="center">
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    color="error"
+                    startIcon={<DeleteIcon />}
+                    disabled={!hasFile || !doc}
+                    onClick={() => doc && handleDeleteDoc(precandidatoId, doc.id)}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Eliminar
+                  </Button>
+                </TableCell>
+              )}
+              <TableCell align="center">
+                {hasFile ? (
+                  <Chip
+                    label={getStatusLabel(status)}
+                    size="small"
+                    sx={{
+                      backgroundColor: getStatusColor(status).bg,
+                      color: getStatusColor(status).color,
+                      fontWeight: 500,
+                      height: 20,
+                      fontSize: '0.7rem',
+                    }}
+                  />
+                ) : (
+                  <Chip
+                    label="Sin Cargar"
+                    size="small"
+                    sx={{
+                      backgroundColor: EMPTY_STATUS_STYLE.bg,
+                      color: EMPTY_STATUS_STYLE.color,
+                      fontWeight: 500,
+                      height: 20,
+                      fontSize: '0.7rem',
+                    }}
+                  />
+                )}
+              </TableCell>
+              {allowDocValidation && (
+                <TableCell align="center">
+                  {hasFile && doc ? (
+                    <TextField
+                      select
+                      size="small"
+                      label="Validar"
+                      value={getDocEdit(editKey, doc).status}
+                      disabled={getDocEdit(editKey, doc).saving}
+                      onChange={(e) =>
+                        patchDocEdit(editKey, doc, {
+                          status: e.target.value as StatusEnum | '',
+                        })
+                      }
+                      sx={{ minWidth: 120 }}
+                    >
+                      <MenuItem value="">
+                        <em>Seleccionar</em>
+                      </MenuItem>
+                      <MenuItem value={StatusEnum.VALIDO}>Válido</MenuItem>
+                      <MenuItem value={StatusEnum.ERROR}>Error</MenuItem>
+                    </TextField>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      -
+                    </Typography>
+                  )}
+                </TableCell>
+              )}
+              {allowDocValidation && (
+                <TableCell>
+                  {hasFile && doc ? (
+                    <TextField
+                      size="small"
+                      fullWidth
+                      multiline
+                      maxRows={3}
+                      placeholder="Comentario..."
+                      value={getDocEdit(editKey, doc).comment}
+                      disabled={getDocEdit(editKey, doc).saving}
+                      onChange={(e) =>
+                        patchDocEdit(editKey, doc, {
+                          comment: e.target.value,
+                        })
+                      }
+                    />
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      -
+                    </Typography>
+                  )}
+                </TableCell>
+              )}
+              {allowDocValidation && (
+                <TableCell align="center">
+                  <Box
+                    sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}
+                  >
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() =>
+                        handleSaveDocStatus(precandidatoId, editKey, doc)
+                      }
+                      disabled={
+                        !hasFile ||
+                        !doc ||
+                        !getDocEdit(editKey, doc).status ||
+                        !isDocEditDirty(editKey, doc) ||
+                        getDocEdit(editKey, doc).saving
+                      }
+                      sx={{ textTransform: 'none' }}
+                    >
+                      {getDocEdit(editKey, doc).saving
+                        ? 'Guardando...'
+                        : 'Guardar'}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => cancelDocEdit(editKey)}
+                      disabled={
+                        !isDocEditDirty(editKey, doc) ||
+                        getDocEdit(editKey, doc).saving
+                      }
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Cancelar
+                    </Button>
+                  </Box>
+                </TableCell>
+              )}
+            </TableRow>
+          )
+        })}
+      </TableBody>
+    </Table>
+  )
+
+  const renderDocsFallback = (
+    <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+      Cargando tipos de documento...
+    </Typography>
+  )
+
+  const renderDocsSection = (
+    rows: DocumentRow[] | undefined,
+    precandidatoId: number,
+    showSignColumn: boolean
+  ) =>
+    rows && rows.length > 0 ? (
+      renderDocsTable(rows, precandidatoId, showSignColumn)
+    ) : (
+      renderDocsFallback
+    )
+
+  const renderDocumentsGroup = (rows: DocumentRow[] | undefined, precandidatoId: number) => {
+    const canSign = areAllDocsValid(rows)
+    const rawDocs = rawDocsMap.get(precandidatoId)
+    const generatedMerged = generatedTypes && rawDocs ? mergeDocs(generatedTypes, rawDocs) : null
+
+    return (
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Documentos</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          <TableRow hover>
+            <TableCell>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <IconButton
+                  size="small"
+                  aria-label="Expandir Documentos por validar"
+                  onClick={() => handleToggleDocRow('validate')}
+                >
+                  {expandedDocRow === 'validate' ? (
+                    <KeyboardArrowDownIcon />
+                  ) : (
+                    <KeyboardArrowRightIcon />
+                  )}
+                </IconButton>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  Documentos por validar
+                </Typography>
+              </Box>
+            </TableCell>
+          </TableRow>
+          {expandedDocRow === 'validate' && (
+            <TableRow>
+              <TableCell sx={{ pl: 6 }}>
+                {renderDocsSection(rows, precandidatoId, false)}
+              </TableCell>
+            </TableRow>
+          )}
+          <TableRow hover>
+            <TableCell>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <IconButton
+                  size="small"
+                  aria-label="Expandir Documentos por firmar y validar"
+                  disabled={!canSign}
+                  onClick={() => handleToggleDocRow('sign')}
+                >
+                  {expandedDocRow === 'sign' ? (
+                    <KeyboardArrowDownIcon />
+                  ) : (
+                    <KeyboardArrowRightIcon />
+                  )}
+                </IconButton>
+                <Typography
+                  variant="body2"
+                  sx={{ fontWeight: 500, color: canSign ? 'text.primary' : 'text.disabled' }}
+                >
+                  Documentos por firmar y validar
+                </Typography>
+              </Box>
+            </TableCell>
+          </TableRow>
+          {expandedDocRow === 'sign' && canSign && (
+            <TableRow>
+              <TableCell sx={{ pl: 6 }}>
+                {generatedTypesError ? (
+                  <Alert severity="warning" sx={{ mt: 1 }}>
+                    No se pudieron cargar los tipos de documento generados
+                  </Alert>
+                ) : generatedMerged === null ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                    <CircularProgress size={20} />
+                  </Box>
+                ) : (
+                  renderDocsSection(generatedMerged, precandidatoId, true)
+                )}
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    )
+  }
 
   return (
     <Box sx={{ p: 2 }}>
@@ -496,222 +888,10 @@ export function PrecandidatosTable({
                             <Alert severity="warning" sx={{ mt: 1 }}>
                               No se pudieron cargar los documentos
                             </Alert>
-                          ) : merged && merged.length > 0 ? (
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell>Tipo</TableCell>
-                                  <TableCell>Nombre</TableCell>
-                                  {allowDocActions && <TableCell align="center">Subir</TableCell>}
-                                  {allowDocActions && <TableCell align="center">Eliminar</TableCell>}
-                                  <TableCell align="center">Status</TableCell>
-                                  {allowDocValidation && (
-                                    <TableCell align="center">Validar</TableCell>
-                                  )}
-                                  {allowDocValidation && <TableCell>Comentario</TableCell>}
-                                  {allowDocValidation && (
-                                    <TableCell align="center">Acciones</TableCell>
-                                  )}
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {merged.map((row) => {
-                                  const doc = row.document
-                                  const status = doc?.status ?? null
-                                  const uploadKey = `${precandidatoId}-${row.catalogType}`
-                                  const editKey = getDocEditKey(precandidatoId, row.catalogType)
-                                  const isUploading = uploadingDocs.has(uploadKey)
-                                  const hasFile = doc !== null
-
-                                  return (
-                                    <TableRow key={row.catalogType} hover>
-                                      <TableCell>
-                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                          {row.catalogType}
-                                        </Typography>
-                                      </TableCell>
-                                      <TableCell>
-                                        {hasFile ? (
-                                          <Button
-                                            variant="text"
-                                            size="small"
-                                            onClick={() => doc && token && downloadDocumentFile(doc, token)}
-                                            sx={{ textTransform: 'none', color: 'primary.main', justifyContent: 'flex-start' }}
-                                          >
-                                            {doc?.originalFilename || row.catalogType}
-                                          </Button>
-                                        ) : (
-                                          <Typography variant="body2" color="text.secondary">
-                                            -
-                                          </Typography>
-                                        )}
-                                      </TableCell>
-                                      {allowDocActions && (
-                                        <TableCell align="center">
-                                          <input
-                                            type="file"
-                                            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
-                                            style={{ display: 'none' }}
-                                            ref={(el) => {
-                                              if (el) fileInputRefs.current.set(uploadKey, el)
-                                            }}
-                                            onChange={(e) => handleFileSelect(precandidatoId, row.catalogType, e.target.files?.[0] || null)}
-                                          />
-                                          <Button
-                                            variant="outlined"
-                                            size="small"
-                                            startIcon={isUploading ? <CircularProgress size={14} /> : <CloudUploadIcon />}
-                                            onClick={() => fileInputRefs.current.get(uploadKey)?.click()}
-                                            disabled={!isDocsEnabled || isUploading || hasFile}
-                                            sx={{ textTransform: 'none' }}
-                                          >
-                                            Subir
-                                          </Button>
-                                        </TableCell>
-                                      )}
-                                      {allowDocActions && (
-                                        <TableCell align="center">
-                                          <Button
-                                            variant="outlined"
-                                            size="small"
-                                            color="error"
-                                            startIcon={<DeleteIcon />}
-                                            disabled={!hasFile || !doc}
-                                            onClick={() => doc && handleDeleteDoc(precandidatoId, doc.id)}
-                                            sx={{ textTransform: 'none' }}
-                                          >
-                                            Eliminar
-                                          </Button>
-                                        </TableCell>
-                                      )}
-                                      <TableCell align="center">
-                                        {hasFile ? (
-                                          <Chip
-                                            label={getStatusLabel(status)}
-                                            size="small"
-                                            sx={{
-                                              backgroundColor: getStatusColor(status).bg,
-                                              color: getStatusColor(status).color,
-                                              fontWeight: 500,
-                                              height: 20,
-                                              fontSize: '0.7rem',
-                                            }}
-                                          />
-                                        ) : (
-                                          <Chip
-                                            label="Sin Cargar"
-                                            size="small"
-                                            sx={{
-                                              backgroundColor: EMPTY_STATUS_STYLE.bg,
-                                              color: EMPTY_STATUS_STYLE.color,
-                                              fontWeight: 500,
-                                              height: 20,
-                                              fontSize: '0.7rem',
-                                            }}
-                                          />
-                                        )}
-                                      </TableCell>
-                                      {allowDocValidation && (
-                                        <TableCell align="center">
-                                          {hasFile && doc ? (
-                                            <TextField
-                                              select
-                                              size="small"
-                                              label="Validar"
-                                              value={getDocEdit(editKey, doc).status}
-                                              disabled={getDocEdit(editKey, doc).saving}
-                                              onChange={(e) =>
-                                                patchDocEdit(editKey, doc, {
-                                                  status: e.target.value as StatusEnum | '',
-                                                })
-                                              }
-                                              sx={{ minWidth: 120 }}
-                                            >
-                                              <MenuItem value="">
-                                                <em>Seleccionar</em>
-                                              </MenuItem>
-                                              <MenuItem value={StatusEnum.VALIDO}>Válido</MenuItem>
-                                              <MenuItem value={StatusEnum.ERROR}>Error</MenuItem>
-                                            </TextField>
-                                          ) : (
-                                            <Typography variant="body2" color="text.secondary">
-                                              -
-                                            </Typography>
-                                          )}
-                                        </TableCell>
-                                      )}
-                                      {allowDocValidation && (
-                                        <TableCell>
-                                          {hasFile && doc ? (
-                                            <TextField
-                                              size="small"
-                                              fullWidth
-                                              multiline
-                                              maxRows={3}
-                                              placeholder="Comentario..."
-                                              value={getDocEdit(editKey, doc).comment}
-                                              disabled={getDocEdit(editKey, doc).saving}
-                                              onChange={(e) =>
-                                                patchDocEdit(editKey, doc, {
-                                                  comment: e.target.value,
-                                                })
-                                              }
-                                            />
-                                          ) : (
-                                            <Typography variant="body2" color="text.secondary">
-                                              -
-                                            </Typography>
-                                          )}
-                                        </TableCell>
-                                      )}
-                                      {allowDocValidation && (
-                                        <TableCell align="center">
-                                          <Box
-                                            sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}
-                                          >
-                                            <Button
-                                              variant="contained"
-                                              size="small"
-                                              onClick={() =>
-                                                handleSaveDocStatus(precandidatoId, editKey, doc)
-                                              }
-                                              disabled={
-                                                !hasFile ||
-                                                !doc ||
-                                                !getDocEdit(editKey, doc).status ||
-                                                !isDocEditDirty(editKey, doc) ||
-                                                getDocEdit(editKey, doc).saving
-                                              }
-                                              sx={{ textTransform: 'none' }}
-                                            >
-                                              {getDocEdit(editKey, doc).saving
-                                                ? 'Guardando...'
-                                                : 'Guardar'}
-                                            </Button>
-                                            <Button
-                                              variant="outlined"
-                                              size="small"
-                                              onClick={() => cancelDocEdit(editKey)}
-                                              disabled={
-                                                !isDocEditDirty(editKey, doc) ||
-                                                getDocEdit(editKey, doc).saving
-                                              }
-                                              sx={{ textTransform: 'none' }}
-                                            >
-                                              Cancelar
-                                            </Button>
-                                          </Box>
-                                        </TableCell>
-                                      )}
-                                    </TableRow>
-                                  )
-                                })}
-                              </TableBody>
-                            </Table>
+                          ) : groupDocuments ? (
+                            renderDocumentsGroup(merged, precandidatoId)
                           ) : (
-                            <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-                              Cargando tipos de documento...
-                            </Typography>
+                            renderDocsSection(merged, precandidatoId, false)
                           )}
                         </Box>
                       </TableCell>

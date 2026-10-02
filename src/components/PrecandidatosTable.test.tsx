@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getPrecandidatos: vi.fn(),
   getDocumentsByPrecandidato: vi.fn(),
   getDocumentTypes: vi.fn(),
+  getGeneratedDocumentTypes: vi.fn(),
   uploadDocument: vi.fn(),
   deleteDocument: vi.fn(),
   downloadDocumentFile: vi.fn(),
@@ -23,10 +24,13 @@ vi.mock('../services/demarcacionService', () => ({
 vi.mock('../services/documentService', () => ({
   getDocumentsByPrecandidato: mocks.getDocumentsByPrecandidato,
   getDocumentTypes: mocks.getDocumentTypes,
+  getGeneratedDocumentTypes: mocks.getGeneratedDocumentTypes,
   uploadDocument: mocks.uploadDocument,
   deleteDocument: mocks.deleteDocument,
   downloadDocumentFile: mocks.downloadDocumentFile,
   updateDocumentStatus: mocks.updateDocumentStatus,
+  // mismo valor que documentService.GENERATED_DOCUMENT_KEY (constante en producción)
+  GENERATED_DOCUMENT_KEY: 'GENERATED_DOCUMENT',
 }))
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -100,6 +104,18 @@ const sixDocumentTypes = ['INE', 'CURP', 'RFC', 'COMPROBANTE', 'DOMICILIO', 'FOT
     value,
     type: 'DOCUMENT_TYPE',
     description: value,
+    createdDate: '2026-01-01T00:00:00',
+  })
+)
+
+// C4 (variación task-api-06): "FORMATO DE DECLARACION APP" SIN tilde
+const generatedDocumentTypes = ['CV PUBLICO APP.pdf', 'FOR CV PRIV NEW.pdf', 'FORMATO DE DECLARACION APP.pdf'].map(
+  (value, index) => ({
+    id: index + 10,
+    key: 'GENERATED_DOCUMENT',
+    value,
+    type: 'GENERATED_DOCUMENT',
+    description: value.replace(/\.pdf$/, ''),
     createdDate: '2026-01-01T00:00:00',
   })
 )
@@ -336,5 +352,206 @@ describe('PrecandidatosTable - Docs Válidos column', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar' }))
 
     await waitFor(() => expect(mocks.getPrecandidatos).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('PrecandidatosTable - agrupación Documentos', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'VALIDATOR' } })
+    mocks.getPrecandidatos.mockResolvedValue([precandidato])
+    mocks.getDocumentTypes.mockResolvedValue(documentTypes)
+    mocks.getGeneratedDocumentTypes.mockResolvedValue(generatedDocumentTypes)
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([documentFixture])
+    mocks.updateDocumentStatus.mockResolvedValue({
+      ...documentFixture,
+      status: StatusEnum.VALIDO,
+      statusDescription: 'OK',
+    })
+  })
+
+  async function renderGroupedAndExpand(
+    props: Partial<ComponentProps<typeof PrecandidatosTable>> = {}
+  ) {
+    render(
+      <PrecandidatosTable
+        folioId={1}
+        demarcacionName="ASIENTOS"
+        demarcacionStatus={StatusEnum.VALIDO}
+        groupDocuments
+        {...props}
+      />
+    )
+
+    const [expandButton] = await screen.findAllByRole('button')
+    if (!expandButton) throw new Error('Expand button not found')
+    fireEvent.click(expandButton)
+
+    await waitFor(() => expect(mocks.getDocumentsByPrecandidato).toHaveBeenCalled())
+  }
+
+  it('shows the Documentos wrapper with the two group rows', async () => {
+    await renderGroupedAndExpand()
+
+    expect(await screen.findByRole('columnheader', { name: 'Documentos' })).toBeInTheDocument()
+    expect(screen.getByText('Documentos por validar')).toBeInTheDocument()
+    expect(screen.getByText('Documentos por firmar y validar')).toBeInTheDocument()
+    expect(screen.queryByText('Tipo')).not.toBeInTheDocument()
+  })
+
+  it('renders the current documents table only after expanding the "por validar" row', async () => {
+    await renderGroupedAndExpand({ allowDocActions: true, allowDocValidation: false })
+
+    await screen.findByRole('columnheader', { name: 'Documentos' })
+    expect(screen.queryByText('Tipo')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expandir Documentos por validar' }))
+
+    expect(await screen.findByText('Tipo')).toBeInTheDocument()
+    expect(screen.getByText('ine.pdf')).toBeInTheDocument()
+    expect(screen.getAllByText('Subir').length).toBeGreaterThan(0)
+    expect(mocks.getDocumentsByPrecandidato).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the sign row locked while a document is not VALIDO', async () => {
+    await renderGroupedAndExpand({ allowDocActions: false, allowDocValidation: true })
+
+    const signButton = await screen.findByRole('button', {
+      name: 'Expandir Documentos por firmar y validar',
+    })
+    expect(signButton).toBeDisabled()
+
+    fireEvent.click(signButton)
+
+    expect(mocks.getGeneratedDocumentTypes).not.toHaveBeenCalled()
+    expect(screen.queryByText('Descargar para firmar')).not.toBeInTheDocument()
+  })
+
+  it('keeps the sign row locked when a catalog row has no document uploaded', async () => {
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([])
+
+    await renderGroupedAndExpand({ allowDocActions: false, allowDocValidation: true })
+
+    const signButton = await screen.findByRole('button', {
+      name: 'Expandir Documentos por firmar y validar',
+    })
+    expect(signButton).toBeDisabled()
+
+    fireEvent.click(signButton)
+
+    expect(mocks.getGeneratedDocumentTypes).not.toHaveBeenCalled()
+  })
+
+  it('unlocks the sign row when every document is VALIDO and loads the generated catalog lazily', async () => {
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([
+      { ...documentFixture, status: StatusEnum.VALIDO },
+    ])
+
+    await renderGroupedAndExpand({ allowDocActions: false, allowDocValidation: true })
+
+    const signButton = await screen.findByRole('button', {
+      name: 'Expandir Documentos por firmar y validar',
+    })
+    expect(signButton).toBeEnabled()
+    expect(mocks.getGeneratedDocumentTypes).not.toHaveBeenCalled()
+
+    fireEvent.click(signButton)
+
+    await waitFor(() => expect(mocks.getGeneratedDocumentTypes).toHaveBeenCalledTimes(1))
+    expect(
+      await screen.findByRole('columnheader', { name: 'Descargar para firmar' })
+    ).toBeInTheDocument()
+    expect(screen.getByText('FORMATO DE DECLARACION APP.pdf')).toBeInTheDocument()
+    // la tabla "por validar" sigue colapsada (se mueve, no se duplica)
+    expect(screen.queryByText('ine.pdf')).not.toBeInTheDocument()
+  })
+
+  it('shows the not implemented message when pressing "Descargar y firmar"', async () => {
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([
+      { ...documentFixture, status: StatusEnum.VALIDO },
+    ])
+
+    await renderGroupedAndExpand({ allowDocActions: false, allowDocValidation: true })
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Expandir Documentos por firmar y validar' })
+    )
+    await screen.findByRole('columnheader', { name: 'Descargar para firmar' })
+
+    const downloadButtons = screen.getAllByRole('button', { name: 'Descargar y firmar' })
+    const [downloadButton] = downloadButtons
+    if (!downloadButton) throw new Error('Download button not found')
+    expect(downloadButton).toBeEnabled()
+
+    fireEvent.click(downloadButton)
+
+    expect(await screen.findByText('funcionalidad no implementada')).toBeInTheDocument()
+    // sin llamadas HTTP nuevas al pulsar el botón
+    expect(mocks.getDocumentsByPrecandidato).toHaveBeenCalledTimes(1)
+    expect(mocks.updateDocumentStatus).not.toHaveBeenCalled()
+    expect(mocks.uploadDocument).not.toHaveBeenCalled()
+    expect(mocks.deleteDocument).not.toHaveBeenCalled()
+  })
+
+  it('keeps the legacy layout when groupDocuments is not set', async () => {
+    await renderAndExpand({ allowDocActions: false, allowDocValidation: true })
+
+    expect(await screen.findByText('Tipo')).toBeInTheDocument()
+    expect(screen.queryByText('Documentos por validar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Documentos por firmar y validar')).not.toBeInTheDocument()
+    expect(mocks.getGeneratedDocumentTypes).not.toHaveBeenCalled()
+  })
+
+  it('uploads from the sign row with catalogKey GENERATED_DOCUMENT (C4.1)', async () => {
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([
+      { ...documentFixture, status: StatusEnum.VALIDO },
+    ])
+
+    await renderGroupedAndExpand({ allowDocActions: true, allowDocValidation: false })
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Expandir Documentos por firmar y validar' })
+    )
+    await screen.findByRole('columnheader', { name: 'Descargar para firmar' })
+
+    const rowElement = screen.getByText('CV PUBLICO APP.pdf').closest('tr')
+    if (!rowElement) throw new Error('Generated document row not found')
+    const input = rowElement.querySelector('input[type="file"]')
+    if (!(input instanceof HTMLInputElement)) throw new Error('File input not found')
+
+    const file = new File(['content'], 'cv.pdf', { type: 'application/pdf' })
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await waitFor(() =>
+      expect(mocks.uploadDocument).toHaveBeenCalledWith(
+        7,
+        'CV PUBLICO APP.pdf',
+        file,
+        'GENERATED_DOCUMENT'
+      )
+    )
+  })
+
+  it('uploads from the validate row without catalogKey (C4.1 regression)', async () => {
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([])
+
+    await renderGroupedAndExpand({ allowDocActions: true, allowDocValidation: false })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expandir Documentos por validar' }))
+    await screen.findByText('Tipo')
+
+    const rowElement = screen.getByText('INE').closest('tr')
+    if (!rowElement) throw new Error('Document row not found')
+    const input = rowElement.querySelector('input[type="file"]')
+    if (!(input instanceof HTMLInputElement)) throw new Error('File input not found')
+
+    const file = new File(['content'], 'ine.pdf', { type: 'application/pdf' })
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await waitFor(() =>
+      expect(mocks.uploadDocument).toHaveBeenCalledWith(7, 'INE', file, undefined)
+    )
+    const [,,, catalogKey] = mocks.uploadDocument.mock.calls[0] ?? []
+    expect(catalogKey).toBeUndefined()
   })
 })

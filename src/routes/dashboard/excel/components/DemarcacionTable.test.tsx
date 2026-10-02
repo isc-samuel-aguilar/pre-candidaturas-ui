@@ -40,6 +40,15 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }))
 
+vi.mock('../../../../components/PrecandidatosTable', () => ({
+  PrecandidatosTable: (props: { groupDocuments?: boolean }) => (
+    <div
+      data-testid="precandidatos-table"
+      data-group-documents={String(props.groupDocuments ?? false)}
+    />
+  ),
+}))
+
 const registeredRow: DemarcacionRow = {
   catalogo: {
     id: 1,
@@ -73,7 +82,7 @@ const unregisteredRow: DemarcacionRow = {
   status: null,
 }
 
-function renderTable(rows: DemarcacionRow[]) {
+function renderTable(rows: DemarcacionRow[], mode?: 'upload' | 'validate') {
   render(
     <DemarcacionTable
       demarcaciones={rows}
@@ -82,6 +91,7 @@ function renderTable(rows: DemarcacionRow[]) {
       onUpload={async () => {}}
       onDelete={async () => {}}
       getStatusColor={() => ({ bg: '#FFFFFF', color: '#000000' })}
+      mode={mode}
     />
   )
 }
@@ -134,5 +144,38 @@ describe('DemarcacionTable - link a la ficha de demarcación', () => {
       to: '/dashboard/$folio/demarcaciones/$alias',
       params: { folio: 'FOLIO-2026', alias: '1A DEMARCACION' },
     })
+  })
+})
+
+describe('DemarcacionTable - agrupación de documentos', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.useNavigate.mockReturnValue(vi.fn())
+  })
+
+  it('enables grouped documents for PrecandidatosTable in upload mode', () => {
+    renderTable([registeredRow])
+
+    const [expandButton] = screen.getAllByRole('button')
+    if (!expandButton) throw new Error('Expand button not found')
+    fireEvent.click(expandButton)
+
+    expect(screen.getByTestId('precandidatos-table')).toHaveAttribute(
+      'data-group-documents',
+      'true'
+    )
+  })
+
+  it('enables grouped documents for PrecandidatosTable in validate mode', () => {
+    renderTable([registeredRow], 'validate')
+
+    const [expandButton] = screen.getAllByRole('button')
+    if (!expandButton) throw new Error('Expand button not found')
+    fireEvent.click(expandButton)
+
+    expect(screen.getByTestId('precandidatos-table')).toHaveAttribute(
+      'data-group-documents',
+      'true'
+    )
   })
 })
