@@ -73,6 +73,7 @@ export interface Precandidato {
   puestoEnSuTrabajo: string
   fechaIngresoTrabajo: string
   fechaTerminacionTrabajo: string
+  validDocsCount?: number
 }
 
 export interface Documento {

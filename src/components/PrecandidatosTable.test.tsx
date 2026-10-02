@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { PrecandidatosTable } from './PrecandidatosTable'
 import { StatusEnum } from '../types/enums'
@@ -93,6 +93,17 @@ const documentTypes = [
   },
 ]
 
+const sixDocumentTypes = ['INE', 'CURP', 'RFC', 'COMPROBANTE', 'DOMICILIO', 'FOTO'].map(
+  (value, index) => ({
+    id: index + 1,
+    key: 'DOCUMENT_TYPE',
+    value,
+    type: 'DOCUMENT_TYPE',
+    description: value,
+    createdDate: '2026-01-01T00:00:00',
+  })
+)
+
 async function renderAndExpand(
   props: Partial<ComponentProps<typeof PrecandidatosTable>> = {}
 ) {
@@ -110,6 +121,27 @@ async function renderAndExpand(
   fireEvent.click(expandButton)
 
   await waitFor(() => expect(mocks.getDocumentsByPrecandidato).toHaveBeenCalled())
+}
+
+async function renderTable(props: Partial<ComponentProps<typeof PrecandidatosTable>> = {}) {
+  render(
+    <PrecandidatosTable
+      folioId={1}
+      demarcacionName="ASIENTOS"
+      demarcacionStatus={StatusEnum.VALIDO}
+      {...props}
+    />
+  )
+  await screen.findByText('Docs Válidos')
+}
+
+function getHeaderPositions() {
+  const headers = screen.getAllByRole('columnheader').map((cell) => cell.textContent)
+  return {
+    calidad: headers.indexOf('Calidad'),
+    docsValidos: headers.indexOf('Docs Válidos'),
+    claveIne: headers.indexOf('Clave INE'),
+  }
 }
 
 describe('PrecandidatosTable', () => {
@@ -194,5 +226,115 @@ describe('PrecandidatosTable', () => {
       await screen.findByText('No se pudieron cargar los documentos')
     ).toBeInTheDocument()
     expect(mocks.updateDocumentStatus).not.toHaveBeenCalled()
+  })
+})
+
+describe('PrecandidatosTable - Docs Válidos column', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'VALIDATOR' } })
+    mocks.getPrecandidatos.mockResolvedValue([precandidato])
+    mocks.getDocumentTypes.mockResolvedValue(documentTypes)
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([documentFixture])
+    mocks.updateDocumentStatus.mockResolvedValue({
+      ...documentFixture,
+      status: StatusEnum.VALIDO,
+      statusDescription: 'OK',
+    })
+  })
+
+  it('places the Docs Válidos header between Calidad and Clave INE in excel mode', async () => {
+    await renderTable()
+
+    const { calidad, docsValidos, claveIne } = getHeaderPositions()
+    expect(calidad).toBeGreaterThan(-1)
+    expect(docsValidos).toBe(calidad + 1)
+    expect(claveIne).toBe(docsValidos + 1)
+
+    const bodyRow = screen.getAllByRole('row')[1]
+    if (!bodyRow) throw new Error('Body row not found')
+    const texts = within(bodyRow)
+      .getAllByRole('cell')
+      .map((cell) => cell.textContent)
+    expect(texts.indexOf('0 / 1')).toBe(texts.indexOf('Titular') + 1)
+    expect(texts.indexOf('00000000000000')).toBe(texts.indexOf('0 / 1') + 1)
+  })
+
+  it('places the Docs Válidos header between Calidad and Clave INE in detail mode', async () => {
+    await renderTable({ mode: 'detail' })
+
+    const { calidad, docsValidos, claveIne } = getHeaderPositions()
+    expect(calidad).toBeGreaterThan(-1)
+    expect(docsValidos).toBe(calidad + 1)
+    expect(claveIne).toBe(docsValidos + 1)
+  })
+
+  it('renders the partial format 3 / 6 with a yellow cell', async () => {
+    mocks.getDocumentTypes.mockResolvedValue(sixDocumentTypes)
+    mocks.getPrecandidatos.mockResolvedValue([{ ...precandidato, validDocsCount: 3 }])
+
+    await renderTable()
+
+    const cell = screen.getByText('3 / 6')
+    expect(cell).toHaveStyle({ backgroundColor: '#FFD100', color: '#000000' })
+  })
+
+  it('renders 6 / 6 with a green cell when every document is valid', async () => {
+    mocks.getDocumentTypes.mockResolvedValue(sixDocumentTypes)
+    mocks.getPrecandidatos.mockResolvedValue([{ ...precandidato, validDocsCount: 6 }])
+
+    await renderTable()
+
+    const cell = screen.getByText('6 / 6')
+    expect(cell).toHaveStyle({ backgroundColor: '#4CAF50', color: '#FFFFFF' })
+  })
+
+  it('renders 0 / 6 with a gray cell when there are no valid documents', async () => {
+    mocks.getDocumentTypes.mockResolvedValue(sixDocumentTypes)
+    mocks.getPrecandidatos.mockResolvedValue([{ ...precandidato, validDocsCount: 0 }])
+
+    await renderTable()
+
+    const cell = screen.getByText('0 / 6')
+    expect(cell).toHaveStyle({ backgroundColor: '#E0E0E0', color: '#757575' })
+  })
+
+  it('falls back to 0 / 6 in gray when validDocsCount is absent from the backend', async () => {
+    mocks.getDocumentTypes.mockResolvedValue(sixDocumentTypes)
+
+    await renderTable()
+
+    const cell = screen.getByText('0 / 6')
+    expect(cell).toHaveStyle({ backgroundColor: '#E0E0E0', color: '#757575' })
+  })
+
+  it('renders 0 / 0 in gray when the document type catalog is empty', async () => {
+    mocks.getDocumentTypes.mockResolvedValue([])
+    mocks.getPrecandidatos.mockResolvedValue([{ ...precandidato, validDocsCount: 0 }])
+
+    await renderTable()
+
+    const cell = screen.getByText('0 / 0')
+    expect(cell).toHaveStyle({ backgroundColor: '#E0E0E0', color: '#757575' })
+  })
+
+  it('refetches precandidatos after validating a document', async () => {
+    await renderAndExpand({ allowDocActions: false, allowDocValidation: true })
+    expect(mocks.getPrecandidatos).toHaveBeenCalledTimes(1)
+
+    fireEvent.mouseDown(screen.getByLabelText('Validar'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Válido' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() => expect(mocks.getPrecandidatos).toHaveBeenCalledTimes(2))
+  })
+
+  it('refetches precandidatos after deleting a document', async () => {
+    await renderAndExpand({ allowDocActions: true, allowDocValidation: false })
+    expect(mocks.getPrecandidatos).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar' }))
+
+    await waitFor(() => expect(mocks.getPrecandidatos).toHaveBeenCalledTimes(2))
   })
 })

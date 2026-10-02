@@ -29,7 +29,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DeleteIcon from '@mui/icons-material/Delete'
 import SearchIcon from '@mui/icons-material/Search'
 import PeopleIcon from '@mui/icons-material/People'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, Link } from '@tanstack/react-router'
 import type { DemarcacionRow, DemarcacionStatus } from '../../../../types/demarcacion'
 import { StatusEnum } from '../../../../types/enums'
 import { PrecandidatosTable } from '../../../../components/PrecandidatosTable'
@@ -301,7 +301,26 @@ export function DemarcacionTable({
                       </IconButton>
                     </TableCell>
                     <TableCell>
-                      {row.catalogo.alias || row.catalogo.demarcacion}
+                      {row.folioDemarcacion ? (
+                        <Link
+                          to="/dashboard/$folio/demarcaciones/$alias"
+                          params={{
+                            folio: row.folioDemarcacion.folio,
+                            alias: row.catalogo.alias || row.catalogo.demarcacion,
+                          }}
+                          target="_blank"
+                          rel="opener"
+                          style={{
+                            color: '#003366',
+                            fontWeight: 500,
+                            textDecoration: 'underline',
+                          }}
+                        >
+                          {row.catalogo.alias || row.catalogo.demarcacion}
+                        </Link>
+                      ) : (
+                        row.catalogo.alias || row.catalogo.demarcacion
+                      )}
                     </TableCell>
                     <TableCell align="center">
                       <Button
@@ -312,10 +331,11 @@ export function DemarcacionTable({
                         onClick={() => {
                           if (row.folioDemarcacion) {
                             navigate({
-                              to:
-                                '/dashboard/demarcaciones/' +
-                                row.folioDemarcacion.id,
-                              search: { folioId: row.folioDemarcacion.folioId },
+                              to: '/dashboard/$folio/demarcaciones/$alias',
+                              params: {
+                                folio: row.folioDemarcacion.folio,
+                                alias: row.catalogo.alias || row.catalogo.demarcacion,
+                              },
                             })
                           }
                         }}

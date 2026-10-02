@@ -85,6 +85,15 @@ function getStatusColor(status?: StatusEnum | null) {
   }
 }
 
+const EMPTY_STATUS_STYLE = { bg: '#E0E0E0', color: '#757575' }
+
+function getDocsValidColor(validDocs: number, totalDocs: number) {
+  if (totalDocs === 0) return EMPTY_STATUS_STYLE
+  if (validDocs === totalDocs) return getStatusColor(StatusEnum.VALIDO)
+  if (validDocs === 0) return EMPTY_STATUS_STYLE
+  return getStatusColor(StatusEnum.POR_VALIDAR)
+}
+
 function mergeDocs(documentTypes: KeyValueCatalog[], existingDocs: Documento[]): DocumentRow[] {
   return documentTypes.map((type) => {
     const found = existingDocs.find((d) => d.keyValueCatalogValue === type.value)
@@ -258,6 +267,7 @@ export function PrecandidatosTable({
       await updateDocumentStatus(doc.id, payload)
       cancelDocEdit(key)
       await refreshDocs(precandidatoId)
+      await fetchPrecandidatos()
       setSnackbar({
         open: true,
         message: 'Documento actualizado correctamente',
@@ -323,6 +333,7 @@ export function PrecandidatosTable({
     try {
       await deleteDocument(documentId)
       await refreshDocs(precandidatoId)
+      await fetchPrecandidatos()
     } catch {
       // error handled by parent
     }
@@ -357,6 +368,8 @@ export function PrecandidatosTable({
   }
 
   const isDetailMode = mode === 'detail'
+  // 10 (excel) / 30 (detail): coincide con el nº real de celdas desde que se añadió
+  // "Docs Válidos" (antes había drift: 9/29 celdas frente a colSpan 10/30)
   const totalColumns = isDetailMode ? 30 : 10
 
   return (
@@ -374,6 +387,7 @@ export function PrecandidatosTable({
               <TableCell>Nombre Completo</TableCell>
               <TableCell>Cargo</TableCell>
               <TableCell>Calidad</TableCell>
+              <TableCell>Docs Válidos</TableCell>
               <TableCell>Clave INE</TableCell>
               {isDetailMode && <TableCell>OCR</TableCell>}
               <TableCell>CURP</TableCell>
@@ -412,6 +426,9 @@ export function PrecandidatosTable({
               const merged = documentsMap.get(precandidatoId)
               const isLoadingDocs = loadingDocs.has(precandidatoId)
               const hasDocsError = docsErrorIds.has(precandidatoId)
+              const validDocs = p.validDocsCount ?? 0
+              const totalDocs = documentTypes.length
+              const docsValidStyle = getDocsValidColor(validDocs, totalDocs)
 
               return (
                 <>
@@ -428,6 +445,15 @@ export function PrecandidatosTable({
                     <TableCell>{formatFullName(p)}</TableCell>
                     <TableCell>{p.cargo}</TableCell>
                     <TableCell>{p.calidad}</TableCell>
+                    <TableCell
+                      style={{
+                        backgroundColor: docsValidStyle.bg,
+                        color: docsValidStyle.color,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {validDocs} / {totalDocs}
+                    </TableCell>
                     <TableCell>{p.claveIfe}</TableCell>
                     {isDetailMode && <TableCell>{p.ocr}</TableCell>}
                     <TableCell>{p.curp}</TableCell>
@@ -576,8 +602,8 @@ export function PrecandidatosTable({
                                             label="Sin Cargar"
                                             size="small"
                                             sx={{
-                                              backgroundColor: '#E0E0E0',
-                                              color: '#757575',
+                                              backgroundColor: EMPTY_STATUS_STYLE.bg,
+                                              color: EMPTY_STATUS_STYLE.color,
                                               fontWeight: 500,
                                               height: 20,
                                               fontSize: '0.7rem',

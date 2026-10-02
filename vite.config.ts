@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import { resolve } from 'path'
@@ -27,6 +28,7 @@ export default defineConfig(({ command }) => ({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     css: true,
+    exclude: [...configDefaults.exclude, '**/e2e/**'],
   },
   optimizeDeps: {
     cache: command === 'serve' ? false : true,

@@ -9,22 +9,21 @@ import {
   CircularProgress,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { getMyFolio, getDemarcacionById } from '../../../services/demarcacionService'
-import { useAuth } from '../../../contexts/AuthContext'
-import type { FolioDemarcacion } from '../../../types/demarcacion'
-import { StatusEnum } from '../../../types/enums'
-import { PrecandidatosTable } from '../../../components/PrecandidatosTable'
+import { getMyFolio, getDemarcacionesByFolio } from '../../../../services/demarcacionService'
+import { getFolios } from '../../../../services/folioService'
+import { resolveFolioAccess } from '../../../../utils/folioAccess'
+import type { FolioAccessResult } from '../../../../utils/folioAccess'
+import { useAuth } from '../../../../contexts/AuthContext'
+import type { FolioDemarcacion } from '../../../../types/demarcacion'
+import { StatusEnum } from '../../../../types/enums'
+import { PrecandidatosTable } from '../../../../components/PrecandidatosTable'
 
-export const Route = createFileRoute('/dashboard/demarcaciones/$id')({
-  validateSearch: (search: Record<string, unknown>): { folioId?: number } => ({
-    folioId: search.folioId ? Number(search.folioId) : undefined,
-  }),
+export const Route = createFileRoute('/dashboard/$folio/demarcaciones/$alias')({
   component: DemarcacionDetailPage,
 })
 
 function DemarcacionDetailPage() {
-  const { id } = Route.useParams()
-  const { folioId: requestedFolioId } = Route.useSearch()
+  const { folio, alias } = Route.useParams()
   const { user } = useAuth()
   const [demarcacion, setDemarcacion] = useState<FolioDemarcacion | null>(null)
   const [loading, setLoading] = useState(true)
@@ -38,25 +37,35 @@ function DemarcacionDetailPage() {
 
     const fetchData = async () => {
       try {
-        let folioId = requestedFolioId
-        const role = user.role
-
-        if (role === 'ADMIN' || role === 'VALIDATOR') {
-          if (!folioId) {
-            const myFolio = await getMyFolio()
-            folioId = myFolio.id
-          }
-        } else {
+        let access: FolioAccessResult
+        if (user.role === 'REGISTER') {
           const myFolio = await getMyFolio()
-          if (folioId && folioId !== myFolio.id) {
-            setError('No tienes permiso para ver este registro')
-            return
-          }
-          folioId = myFolio.id
+          access = resolveFolioAccess({ role: user.role, folioParam: folio, myFolio })
+        } else {
+          const folios = await getFolios()
+          access = resolveFolioAccess({ role: user.role, folioParam: folio, folios })
         }
 
-        const fd = await getDemarcacionById(folioId, parseInt(id))
-        if (!cancelled) setDemarcacion(fd)
+        if (access.status === 'denied') {
+          setError('No tienes permiso para ver este registro')
+          return
+        }
+        if (access.status === 'not_found') {
+          setError('Folio no encontrado')
+          return
+        }
+
+        const demarcaciones = await getDemarcacionesByFolio(access.folioId)
+        const found = demarcaciones.find(
+          (d) => d.alias === alias || d.demarcacion === alias
+        )
+
+        if (!found) {
+          setError('Demarcación no encontrada')
+          return
+        }
+
+        if (!cancelled) setDemarcacion(found)
       } catch {
         if (!cancelled) setError('No se pudo cargar la información de la demarcación')
       } finally {
@@ -69,7 +78,7 @@ function DemarcacionDetailPage() {
     return () => {
       cancelled = true
     }
-  }, [id, requestedFolioId, user])
+  }, [folio, alias, user])
 
   const getStatusLabel = (status: string | null) => {
     switch (status) {
