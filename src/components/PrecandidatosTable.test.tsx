@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   uploadDocument: vi.fn(),
   deleteDocument: vi.fn(),
   downloadDocumentFile: vi.fn(),
+  generateDocumentForSign: vi.fn(),
   updateDocumentStatus: vi.fn(),
   useAuth: vi.fn(),
 }))
@@ -28,6 +29,9 @@ vi.mock('../services/documentService', () => ({
   uploadDocument: mocks.uploadDocument,
   deleteDocument: mocks.deleteDocument,
   downloadDocumentFile: mocks.downloadDocumentFile,
+  generateDocumentForSign: mocks.generateDocumentForSign,
+  // mismo helper que documentService.toDocumentoKey (el módulo entero está mockeado)
+  toDocumentoKey: (value: string) => value.replace(/\.pdf$/i, '').replace(/ /g, '_'),
   updateDocumentStatus: mocks.updateDocumentStatus,
   // mismo valor que documentService.GENERATED_DOCUMENT_KEY (constante en producción)
   GENERATED_DOCUMENT_KEY: 'GENERATED_DOCUMENT',
@@ -466,31 +470,103 @@ describe('PrecandidatosTable - agrupación Documentos', () => {
     expect(screen.queryByText('ine.pdf')).not.toBeInTheDocument()
   })
 
-  it('shows the not implemented message when pressing "Descargar y firmar"', async () => {
-    mocks.getDocumentsByPrecandidato.mockResolvedValue([
-      { ...documentFixture, status: StatusEnum.VALIDO },
-    ])
-
+  async function openSignTable() {
     await renderGroupedAndExpand({ allowDocActions: false, allowDocValidation: true })
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'Expandir Documentos por firmar y validar' })
     )
     await screen.findByRole('columnheader', { name: 'Descargar para firmar' })
+  }
+
+  it('downloads the generated PDF with the precandidato id and normalized key (C5)', async () => {
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([
+      { ...documentFixture, status: StatusEnum.VALIDO },
+    ])
+    mocks.generateDocumentForSign.mockResolvedValue(undefined)
+
+    await openSignTable()
 
     const downloadButtons = screen.getAllByRole('button', { name: 'Descargar y firmar' })
-    const [downloadButton] = downloadButtons
-    if (!downloadButton) throw new Error('Download button not found')
-    expect(downloadButton).toBeEnabled()
+    const [cvButton] = downloadButtons
+    if (!cvButton) throw new Error('Download button not found')
+    expect(cvButton).toBeEnabled()
 
-    fireEvent.click(downloadButton)
+    fireEvent.click(cvButton)
 
-    expect(await screen.findByText('funcionalidad no implementada')).toBeInTheDocument()
-    // sin llamadas HTTP nuevas al pulsar el botón
+    await waitFor(() => {
+      expect(mocks.generateDocumentForSign).toHaveBeenCalledWith(
+        7,
+        'CV_PUBLICO_APP',
+        'token'
+      )
+    })
+    expect(await screen.findByText('Documento generado')).toBeInTheDocument()
     expect(mocks.getDocumentsByPrecandidato).toHaveBeenCalledTimes(1)
     expect(mocks.updateDocumentStatus).not.toHaveBeenCalled()
     expect(mocks.uploadDocument).not.toHaveBeenCalled()
     expect(mocks.deleteDocument).not.toHaveBeenCalled()
+  })
+
+  it('disables only the pressed row while the download is in progress', async () => {
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([
+      { ...documentFixture, status: StatusEnum.VALIDO },
+    ])
+    const deferred: { resolve?: () => void } = {}
+    mocks.generateDocumentForSign.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          deferred.resolve = resolve
+        })
+    )
+
+    await openSignTable()
+
+    const buttons = screen.getAllByRole('button', { name: 'Descargar y firmar' })
+    expect(buttons).toHaveLength(3)
+    const [firstButton] = buttons
+    if (!firstButton) throw new Error('Download button not found')
+
+    fireEvent.click(firstButton)
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Descargar y firmar' })[0]).toBeDisabled()
+    )
+    const duringDownload = screen.getAllByRole('button', { name: 'Descargar y firmar' })
+    expect(duringDownload[1]).toBeEnabled()
+    expect(duringDownload[2]).toBeEnabled()
+
+    deferred.resolve?.()
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Descargar y firmar' })[0]).toBeEnabled()
+    )
+    expect(await screen.findByText('Documento generado')).toBeInTheDocument()
+  })
+
+  it('shows the mapped backend error and re-enables the button when the download fails', async () => {
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([
+      { ...documentFixture, status: StatusEnum.VALIDO },
+    ])
+    mocks.generateDocumentForSign.mockRejectedValue({
+      message: 'Plantilla no disponible para este documento',
+      status: 400,
+      error: 'TEMPLATE_NOT_FOUND',
+    })
+
+    await openSignTable()
+
+    const [downloadButton] = screen.getAllByRole('button', { name: 'Descargar y firmar' })
+    if (!downloadButton) throw new Error('Download button not found')
+
+    fireEvent.click(downloadButton)
+
+    expect(
+      await screen.findByText('Plantilla no disponible para este documento')
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('button', { name: 'Descargar y firmar' })[0]
+    ).toBeEnabled()
   })
 
   it('keeps the legacy layout when groupDocuments is not set', async () => {

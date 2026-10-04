@@ -30,6 +30,8 @@ import {
   uploadDocument,
   deleteDocument,
   downloadDocumentFile,
+  generateDocumentForSign,
+  toDocumentoKey,
   updateDocumentStatus,
   GENERATED_DOCUMENT_KEY,
   type UpdateDocumentStatusPayload,
@@ -132,6 +134,7 @@ export function PrecandidatosTable({
   const [rawDocsMap, setRawDocsMap] = useState<Map<number, Documento[]>>(new Map())
   const [loadingDocs, setLoadingDocs] = useState<Set<number>>(new Set())
   const [uploadingDocs, setUploadingDocs] = useState<Set<string>>(new Set())
+  const [downloadingDocs, setDownloadingDocs] = useState<Set<string>>(new Set())
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [docsErrorIds, setDocsErrorIds] = useState<Set<number>>(new Set())
   const [docEdits, setDocEdits] = useState<Map<string, DocEditState>>(new Map())
@@ -251,8 +254,36 @@ export function PrecandidatosTable({
     setExpandedDocRow((prev) => (prev === row ? null : row))
   }
 
-  const handleDownloadForSign = () => {
-    setSnackbar({ open: true, message: 'funcionalidad no implementada', severity: 'info' })
+  const getDownloadKey = (claveIfe: string, documentoKey: string) =>
+    `${claveIfe}-${documentoKey}`
+
+  const handleDownloadForSign = async (
+    precandidatoId: number,
+    claveIfe: string,
+    catalogValue: string
+  ) => {
+    if (!token) return
+
+    const documentoKey = toDocumentoKey(catalogValue)
+    const downloadKey = getDownloadKey(claveIfe, documentoKey)
+    setDownloadingDocs((prev) => new Set(prev).add(downloadKey))
+
+    try {
+      await generateDocumentForSign(precandidatoId, documentoKey, token)
+      setSnackbar({ open: true, message: 'Documento generado', severity: 'success' })
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: (err as { message?: string }).message || 'Error al descargar el documento',
+        severity: 'error',
+      })
+    } finally {
+      setDownloadingDocs((prev) => {
+        const next = new Set(prev)
+        next.delete(downloadKey)
+        return next
+      })
+    }
   }
 
   const getDocEditKey = (precandidatoId: number, catalogType: string) =>
@@ -427,7 +458,12 @@ export function PrecandidatosTable({
   // "Docs Válidos" (antes había drift: 9/29 celdas frente a colSpan 10/30)
   const totalColumns = isDetailMode ? 30 : 10
 
-  const renderDocsTable = (rows: DocumentRow[], precandidatoId: number, showSignColumn: boolean) => (
+  const renderDocsTable = (
+    rows: DocumentRow[],
+    precandidatoId: number,
+    showSignColumn: boolean,
+    claveIfe: string
+  ) => (
     <Table size="small">
       <TableHead>
         <TableRow>
@@ -454,6 +490,8 @@ export function PrecandidatosTable({
           const editKey = getDocEditKey(precandidatoId, row.catalogType)
           const isUploading = uploadingDocs.has(uploadKey)
           const hasFile = doc !== null
+          const downloadKey = getDownloadKey(claveIfe, toDocumentoKey(row.catalogType))
+          const isDownloading = downloadingDocs.has(downloadKey)
 
           return (
             <TableRow key={row.catalogType} hover>
@@ -467,7 +505,11 @@ export function PrecandidatosTable({
                   <Button
                     variant="outlined"
                     size="small"
-                    onClick={handleDownloadForSign}
+                    onClick={() =>
+                      handleDownloadForSign(precandidatoId, claveIfe, row.catalogType)
+                    }
+                    disabled={isDownloading}
+                    startIcon={isDownloading ? <CircularProgress size={14} /> : undefined}
                     sx={{ textTransform: 'none' }}
                   >
                     Descargar y firmar
@@ -670,15 +712,20 @@ export function PrecandidatosTable({
   const renderDocsSection = (
     rows: DocumentRow[] | undefined,
     precandidatoId: number,
-    showSignColumn: boolean
+    showSignColumn: boolean,
+    claveIfe: string
   ) =>
     rows && rows.length > 0 ? (
-      renderDocsTable(rows, precandidatoId, showSignColumn)
+      renderDocsTable(rows, precandidatoId, showSignColumn, claveIfe)
     ) : (
       renderDocsFallback
     )
 
-  const renderDocumentsGroup = (rows: DocumentRow[] | undefined, precandidatoId: number) => {
+  const renderDocumentsGroup = (
+    rows: DocumentRow[] | undefined,
+    precandidatoId: number,
+    claveIfe: string
+  ) => {
     const canSign = areAllDocsValid(rows)
     const rawDocs = rawDocsMap.get(precandidatoId)
     const generatedMerged = generatedTypes && rawDocs ? mergeDocs(generatedTypes, rawDocs) : null
@@ -714,7 +761,7 @@ export function PrecandidatosTable({
           {expandedDocRow === 'validate' && (
             <TableRow>
               <TableCell sx={{ pl: 6 }}>
-                {renderDocsSection(rows, precandidatoId, false)}
+                {renderDocsSection(rows, precandidatoId, false, claveIfe)}
               </TableCell>
             </TableRow>
           )}
@@ -754,7 +801,7 @@ export function PrecandidatosTable({
                     <CircularProgress size={20} />
                   </Box>
                 ) : (
-                  renderDocsSection(generatedMerged, precandidatoId, true)
+                  renderDocsSection(generatedMerged, precandidatoId, true, claveIfe)
                 )}
               </TableCell>
             </TableRow>
@@ -889,9 +936,9 @@ export function PrecandidatosTable({
                               No se pudieron cargar los documentos
                             </Alert>
                           ) : groupDocuments ? (
-                            renderDocumentsGroup(merged, precandidatoId)
+                            renderDocumentsGroup(merged, precandidatoId, p.claveIfe)
                           ) : (
-                            renderDocsSection(merged, precandidatoId, false)
+                            renderDocsSection(merged, precandidatoId, false, p.claveIfe)
                           )}
                         </Box>
                       </TableCell>

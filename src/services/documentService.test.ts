@@ -6,6 +6,8 @@ import {
   uploadDocument,
   deleteDocument,
   downloadDocumentFile,
+  generateDocumentForSign,
+  toDocumentoKey,
   updateDocumentStatus,
 } from './documentService'
 import type { Documento, KeyValueCatalog } from '../types/demarcacion'
@@ -399,5 +401,151 @@ describe('downloadDocumentFile', () => {
     await expect(downloadDocumentFile(sampleDocument, 'token123')).rejects.toThrow(
       'Error 404'
     )
+  })
+})
+
+describe('toDocumentoKey', () => {
+  it('strips the .pdf extension and replaces spaces with underscores', () => {
+    expect(toDocumentoKey('CV PUBLICO APP.pdf')).toBe('CV_PUBLICO_APP')
+  })
+
+  it('is case-insensitive on the extension and leaves other values untouched', () => {
+    expect(toDocumentoKey('FOR CV PRIV New.PDF')).toBe('FOR_CV_PRIV_New')
+    expect(toDocumentoKey('CV_PUBLICO_APP')).toBe('CV_PUBLICO_APP')
+  })
+})
+
+describe('generateDocumentForSign', () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  function stubPdfFetch(disposition: string | null) {
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {
+        get: (name: string) => (name === 'Content-Disposition' ? disposition : null),
+      },
+      blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    ;(URL as { createObjectURL: (blob: Blob) => string }).createObjectURL = vi.fn(
+      () => 'blob:mock'
+    )
+    ;(URL as { revokeObjectURL: (url: string) => void }).revokeObjectURL = vi.fn()
+
+    const anchors: HTMLAnchorElement[] = []
+    const originalCreateElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+      const el = originalCreateElement(tagName)
+      if (tagName === 'a') anchors.push(el as HTMLAnchorElement)
+      return el
+    })
+
+    return { fetchMock, anchors }
+  }
+
+  it('calls the official endpoint by precandidato id with the normalized documento (C5)', async () => {
+    const { fetchMock } = stubPdfFetch('attachment; filename="CV PUBLICO APP.pdf"')
+
+    await generateDocumentForSign(7, 'CV_PUBLICO_APP', 'token123')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/documents\/pre-candidatos\/7\/generated\?documento=CV_PUBLICO_APP$/),
+      expect.objectContaining({
+        headers: { Authorization: `Bearer token123` },
+      })
+    )
+  })
+
+  it('url-encodes the documento and keeps the numeric id in the path', async () => {
+    const { fetchMock } = stubPdfFetch(null)
+
+    await generateDocumentForSign(42, 'CV PUBLICO APP', 'token123')
+
+    const [url] = fetchMock.mock.calls[0] ?? []
+    expect(String(url)).toContain('/documents/pre-candidatos/42/generated?')
+    expect(String(url)).toContain('documento=CV%20PUBLICO%20APP')
+    expect(String(url)).not.toContain('claveIne')
+  })
+
+  it('uses the filename from the Content-Disposition header', async () => {
+    const { anchors } = stubPdfFetch('attachment; filename="salida.pdf"')
+
+    await generateDocumentForSign(7, 'CV_PUBLICO_APP', 'token123')
+
+    expect(anchors[0]?.download).toBe('salida.pdf')
+  })
+
+  it('falls back to <documento>.pdf when Content-Disposition is missing', async () => {
+    const { anchors } = stubPdfFetch(null)
+
+    await generateDocumentForSign(7, 'CV_PUBLICO_APP', 'token123')
+
+    expect(anchors[0]?.download).toBe('CV_PUBLICO_APP.pdf')
+  })
+
+  it('maps PRECANDIDATO_NOT_FOUND to a spanish message', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      headers: {
+        get: (name: string) => (name === 'content-type' ? 'application/json' : null),
+      },
+      json: async () => ({ message: 'ignored', error: 'PRECANDIDATO_NOT_FOUND' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(generateDocumentForSign(999, 'CV_PUBLICO_APP', 'token123')).rejects.toEqual({
+      message: 'Precandidato no encontrado',
+      status: 400,
+      error: 'PRECANDIDATO_NOT_FOUND',
+    })
+  })
+
+  it('maps BusinessException codes to spanish messages (C5)', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      headers: {
+        get: (name: string) => (name === 'content-type' ? 'application/json' : null),
+      },
+      json: async () => ({ message: 'ignored', error: 'TEMPLATE_NOT_FOUND' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(generateDocumentForSign(7, 'CV_PUBLICO_APP', 'token123')).rejects.toEqual({
+      message: 'Plantilla no disponible para este documento',
+      status: 400,
+      error: 'TEMPLATE_NOT_FOUND',
+    })
+  })
+
+  it('falls back to the API message for unknown error codes', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: {
+        get: (name: string) => (name === 'content-type' ? 'application/json' : null),
+      },
+      json: async () => ({ message: 'Acceso prohibido' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(generateDocumentForSign(7, 'CV_PUBLICO_APP', 'token123')).rejects.toEqual({
+      message: 'Acceso prohibido',
+      status: 403,
+      error: undefined,
+    })
   })
 })

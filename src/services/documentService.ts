@@ -151,3 +151,84 @@ export async function downloadDocumentFile(doc: Documento, token: string): Promi
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
+
+const GENERATED_DOCUMENT_ERROR_MESSAGES: Record<string, string> = {
+  PRECANDIDATO_NOT_FOUND: 'Precandidato no encontrado',
+  // legacy contract (endpoint deprecado por claveIne)
+  PRE_CANDIDATO_NOT_FOUND: 'Precandidato no encontrado',
+  TEMPLATE_NOT_FOUND: 'Plantilla no disponible para este documento',
+  TEMPLATE_INVALID: 'Plantilla de documento inválida',
+  PDF_GENERATION_FAILED: 'Error al generar el documento',
+}
+
+export function toDocumentoKey(catalogValue: string): string {
+  return catalogValue.replace(/\.pdf$/i, '').replace(/ /g, '_')
+}
+
+function getGeneratedFilename(response: Response, fallback: string): string {
+  const header = response.headers.get('Content-Disposition')
+  if (!header) return fallback
+
+  const encodedMatch = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header)
+  if (encodedMatch?.[1]) {
+    try {
+      return decodeURIComponent(encodedMatch[1].trim())
+    } catch {
+      // fall through to the plain filename variants
+    }
+  }
+
+  const quotedMatch = /filename\s*=\s*"([^"]+)"/i.exec(header)
+  if (quotedMatch?.[1]) return quotedMatch[1]
+
+  const bareMatch = /filename\s*=\s*([^;]+)/i.exec(header)
+  if (bareMatch?.[1]) return bareMatch[1].trim()
+
+  return fallback
+}
+
+export async function generateDocumentForSign(
+  preCandidatoId: number,
+  documento: string,
+  token: string
+): Promise<void> {
+  const apiUrl = import.meta.env.VITE_API_URL
+
+  const response = await fetch(
+    `${apiUrl}/documents/pre-candidatos/${preCandidatoId}/generated?documento=${encodeURIComponent(documento)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+
+  if (!response.ok) {
+    let errorCode: string | undefined
+    let apiMessage: string | undefined
+    try {
+      if (response.headers.get('content-type')?.includes('application/json')) {
+        const body = (await response.json()) as { message?: string; error?: string }
+        apiMessage = body?.message
+        errorCode = body?.error
+      }
+    } catch {
+      // ignore malformed error bodies
+    }
+
+    throw mapApiError({
+      message:
+        (errorCode && GENERATED_DOCUMENT_ERROR_MESSAGES[errorCode]) ||
+        apiMessage ||
+        `Error ${response.status}`,
+      status: response.status,
+      error: errorCode,
+    })
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = getGeneratedFilename(response, `${documento}.pdf`)
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
