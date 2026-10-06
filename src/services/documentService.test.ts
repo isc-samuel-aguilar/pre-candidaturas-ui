@@ -57,9 +57,9 @@ const generatedDocumentTypes: KeyValueCatalog[] = [
   {
     id: 11,
     key: 'GENERATED_DOCUMENT',
-    value: 'FOR CV PRIV NEW.pdf',
+    value: 'CV PRIVADO APP.pdf',
     type: 'GENERATED_DOCUMENT',
-    description: 'FOR CV PRIV NEW',
+    description: 'CV PRIVADO APP',
     createdDate: '2026-01-01T00:00:00',
   },
   {
@@ -410,7 +410,7 @@ describe('toDocumentoKey', () => {
   })
 
   it('is case-insensitive on the extension and leaves other values untouched', () => {
-    expect(toDocumentoKey('FOR CV PRIV New.PDF')).toBe('FOR_CV_PRIV_New')
+    expect(toDocumentoKey('CV PRIVADO App.PDF')).toBe('CV_PRIVADO_App')
     expect(toDocumentoKey('CV_PUBLICO_APP')).toBe('CV_PUBLICO_APP')
   })
 })

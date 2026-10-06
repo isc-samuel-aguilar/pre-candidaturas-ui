@@ -113,7 +113,7 @@ const sixDocumentTypes = ['INE', 'CURP', 'RFC', 'COMPROBANTE', 'DOMICILIO', 'FOT
 )
 
 // C4 (variación task-api-06): "FORMATO DE DECLARACION APP" SIN tilde
-const generatedDocumentTypes = ['CV PUBLICO APP.pdf', 'FOR CV PRIV NEW.pdf', 'FORMATO DE DECLARACION APP.pdf'].map(
+const generatedDocumentTypes = ['CV PUBLICO APP.pdf', 'CV PRIVADO APP.pdf', 'FORMATO DE DECLARACION APP.pdf'].map(
   (value, index) => ({
     id: index + 10,
     key: 'GENERATED_DOCUMENT',
