@@ -5,6 +5,12 @@ export interface PdfTemplate {
   plantilla: string
   tokens: number
   ultimaCarga: string
+  version: number
+  activo: boolean
+  actualizadoPor: string | null
+  actualizadoFecha: string | null
+  campos: string
+  salida: string
 }
 
 export interface PdfTemplateError {
@@ -18,6 +24,7 @@ const PDF_TEMPLATE_ERROR_MESSAGES: Record<string, string> = {
   TEMPLATE_INVALID: 'Plantilla de documento inválida',
   FILE_TOO_LARGE: 'El archivo supera el máximo de 5 MB',
   TEMPLATE_WRITE_FAILED: 'No se pudo guardar la plantilla en el servidor',
+  TEMPLATE_NOT_FOUND: 'Plantilla no encontrada',
 }
 
 export function mapPdfTemplateError(error: ApiError): PdfTemplateError {
@@ -68,6 +75,14 @@ export async function uploadPdfTemplate(
       { timeout: 30000 }
     )
     return response.data
+  } catch (error) {
+    throw mapPdfTemplateError(error as ApiError)
+  }
+}
+
+export async function deletePdfTemplate(clave: string): Promise<void> {
+  try {
+    await apiClient.delete(`/pdf-templates/${encodeURIComponent(clave)}`)
   } catch (error) {
     throw mapPdfTemplateError(error as ApiError)
   }

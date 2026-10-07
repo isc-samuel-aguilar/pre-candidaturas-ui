@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import {
   Alert,
   Box,
@@ -20,8 +20,11 @@ import {
   Typography,
 } from '@mui/material'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
+import DeleteIcon from '@mui/icons-material/Delete'
+import EditIcon from '@mui/icons-material/Edit'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import {
+  deletePdfTemplate,
   getPdfTemplates,
   reloadPdfTemplates,
   uploadPdfTemplate,
@@ -30,6 +33,13 @@ import {
 } from '../../../../services/pdfTemplateService'
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+const DOCUMENTO_MAX_WIDTH = 140
+const PLANTILLA_MAX_WIDTH = 215
+const CAMPOS_MAX_WIDTH = 390
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 export function validateUpload(file: File | null, mappings: string): string | null {
   if (!file) return 'Selecciona un archivo PDF'
@@ -37,15 +47,68 @@ export function validateUpload(file: File | null, mappings: string): string | nu
   if (file.size > MAX_UPLOAD_BYTES) return 'El archivo supera el máximo de 5 MB'
 
   const trimmed = mappings.trim()
-  if (trimmed) {
-    try {
-      JSON.parse(trimmed)
-    } catch {
-      return 'El contenido de mappings no es JSON válido'
+  if (!trimmed) return null
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    return 'El contenido de mappings no es JSON válido'
+  }
+  if (!isPlainObject(parsed) || Object.keys(parsed).length === 0) {
+    return 'El contenido de mappings debe ser un objeto JSON no vacío'
+  }
+
+  for (const [clave, entrada] of Object.entries(parsed)) {
+    if (!/^[A-Z0-9_]+$/.test(clave)) {
+      return `La clave "${clave}" no es válida (usa A-Z, 0-9 y _)`
+    }
+    if (!isPlainObject(entrada)) {
+      return `La entrada "${clave}" debe ser un objeto JSON`
+    }
+    if (typeof entrada.salida !== 'string' || !entrada.salida.trim()) {
+      return `Falta "salida" (nombre del documento de salida) en ${clave}`
+    }
+    if (!isPlainObject(entrada.campos)) {
+      return `Falta "campos" como objeto en ${clave}`
+    }
+    if (Object.keys(entrada.campos).length === 0) {
+      return `El "campos" de ${clave} debe ser un objeto no vacío`
     }
   }
 
   return null
+}
+
+export function formatCampos(campos: string): string {
+  try {
+    return JSON.stringify(JSON.parse(campos), null, 2)
+  } catch {
+    return campos
+  }
+}
+
+export function formatDateTime(iso: string): string {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(iso)
+  if (!match) return iso
+  return `${match[1]} ${match[2]}`
+}
+
+export function formatLastUpdate(template: PdfTemplate): string {
+  if (!template.actualizadoPor && !template.actualizadoFecha) return '—'
+  const who = template.actualizadoPor ?? '—'
+  const when = template.actualizadoFecha ? formatDateTime(template.actualizadoFecha) : '—'
+  return `${who} · ${when}`
+}
+
+export function buildUpdateMappings(template: PdfTemplate): string {
+  let campos: unknown
+  try {
+    campos = JSON.parse(template.campos)
+  } catch {
+    campos = template.campos
+  }
+  return JSON.stringify({ [template.documento]: { campos, salida: template.salida } }, null, 2)
 }
 
 function getErrorMessage(error: unknown): string {
@@ -62,6 +125,9 @@ function ConfiguracionPage() {
   const [mappings, setMappings] = useState('')
   const [uploading, setUploading] = useState(false)
   const [inputKey, setInputKey] = useState(0)
+  const [pendingDelete, setPendingDelete] = useState<PdfTemplate | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const mappingsRef = useRef<HTMLTextAreaElement | null>(null)
   const [snackbar, setSnackbar] = useState<{
     open: boolean
     message: string
@@ -132,6 +198,31 @@ function ConfiguracionPage() {
     }
   }, [file, mappings, showSnackbar])
 
+  const handlePrefill = useCallback((template: PdfTemplate) => {
+    setMappings(buildUpdateMappings(template))
+    setFile(null)
+    setInputKey((prev) => prev + 1)
+    const textarea = mappingsRef.current
+    textarea?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    textarea?.focus()
+  }, [])
+
+  const handleDeleteConfirm = useCallback(async () => {
+    const target = pendingDelete
+    if (!target) return
+    setPendingDelete(null)
+    setDeleting(true)
+    try {
+      await deletePdfTemplate(target.documento)
+      showSnackbar('Plantilla borrada', 'success')
+      await loadTemplates()
+    } catch (error) {
+      showSnackbar(getErrorMessage(error), 'error')
+    } finally {
+      setDeleting(false)
+    }
+  }, [pendingDelete, loadTemplates, showSnackbar])
+
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
@@ -165,22 +256,70 @@ function ConfiguracionPage() {
               <TableRow>
                 <TableCell>Documento</TableCell>
                 <TableCell>Plantilla</TableCell>
-                <TableCell>Tokens</TableCell>
                 <TableCell>Última carga</TableCell>
+                <TableCell>Versión</TableCell>
+                <TableCell>Activo</TableCell>
+                <TableCell>Última modificación</TableCell>
+                <TableCell sx={{ maxWidth: CAMPOS_MAX_WIDTH }}>Campos</TableCell>
+                <TableCell>Acciones</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {templates.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4}>Sin plantillas cargadas</TableCell>
+                  <TableCell colSpan={8}>Sin plantillas cargadas</TableCell>
                 </TableRow>
               ) : (
                 templates.map((template) => (
                   <TableRow key={template.documento}>
-                    <TableCell>{template.documento}</TableCell>
-                    <TableCell>{template.plantilla}</TableCell>
-                    <TableCell>{template.tokens}</TableCell>
-                    <TableCell>{template.ultimaCarga}</TableCell>
+                    <TableCell>
+                      <Box sx={{ maxWidth: DOCUMENTO_MAX_WIDTH, overflowWrap: 'break-word' }}>
+                        {template.documento}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ maxWidth: PLANTILLA_MAX_WIDTH, overflowWrap: 'break-word' }}>
+                        {template.plantilla}
+                      </Box>
+                    </TableCell>
+                    <TableCell>{formatDateTime(template.ultimaCarga)}</TableCell>
+                    <TableCell>{template.version}</TableCell>
+                    <TableCell>{template.activo ? 'Sí' : 'No'}</TableCell>
+                    <TableCell>{formatLastUpdate(template)}</TableCell>
+                    <TableCell sx={{ maxWidth: CAMPOS_MAX_WIDTH, verticalAlign: 'top' }}>
+                      <Box
+                        component="pre"
+                        sx={{
+                          m: 0,
+                          maxHeight: 200,
+                          overflow: 'auto',
+                          whiteSpace: 'pre',
+                          fontFamily: 'monospace',
+                          fontSize: '0.75rem',
+                        }}
+                      >
+                        {formatCampos(template.campos)}
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <Button
+                        size="small"
+                        startIcon={<EditIcon />}
+                        onClick={() => handlePrefill(template)}
+                        disabled={deleting}
+                      >
+                        Actualizar…
+                      </Button>
+                      <Button
+                        size="small"
+                        color="error"
+                        startIcon={<DeleteIcon />}
+                        onClick={() => setPendingDelete(template)}
+                        disabled={deleting}
+                      >
+                        Borrar
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -190,7 +329,7 @@ function ConfiguracionPage() {
       )}
 
       <Typography variant="h6" sx={{ mt: 4 }}>
-        Subir plantilla
+        Plantilla PDF
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2, maxWidth: 600 }}>
@@ -213,12 +352,14 @@ function ConfiguracionPage() {
         </Box>
 
         <TextField
+          inputRef={mappingsRef}
           label="mappings.json (opcional)"
           multiline
-          rows={4}
+          rows={8}
           value={mappings}
           onChange={(event) => setMappings(event.target.value)}
-          placeholder='{"TOKEN": "campo"}'
+          placeholder='{"CLAVE": {"campos": {"TOKEN": "campo"}, "salida": "Nombre Documento.pdf"}}'
+          helperText='Cada clave necesita "campos" (objeto no vacío) y "salida" (nombre del documento de salida, p. ej. "CV PUBLICO APP.pdf").'
           fullWidth
         />
 
@@ -248,6 +389,27 @@ function ConfiguracionPage() {
           <Button onClick={() => setConfirmReloadOpen(false)}>Cancelar</Button>
           <Button variant="contained" onClick={() => void handleReloadConfirm()} autoFocus>
             Actualizar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={pendingDelete !== null} onClose={() => setPendingDelete(null)}>
+        <DialogTitle>Borrar plantilla</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Se eliminará la plantilla &quot;{pendingDelete?.documento}&quot; (fila, PDF y entrada
+            del catálogo). ¿Deseas continuar?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingDelete(null)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => void handleDeleteConfirm()}
+            autoFocus
+          >
+            Borrar
           </Button>
         </DialogActions>
       </Dialog>

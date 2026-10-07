@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  deletePdfTemplate,
   getPdfTemplates,
   mapPdfTemplateError,
   reloadPdfTemplates,
@@ -10,12 +11,14 @@ import {
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
+  delete: vi.fn(),
 }))
 
 vi.mock('./apiClient', () => ({
   apiClient: {
     get: mocks.get,
     post: mocks.post,
+    delete: mocks.delete,
   },
   authClient: {},
   ApiClient: class {},
@@ -27,11 +30,34 @@ const templates: PdfTemplate[] = [
     plantilla: 'CV_PUBLICO_APP_template.pdf',
     tokens: 11,
     ultimaCarga: '2026-10-03T10:00:00',
+    version: 1,
+    activo: true,
+    actualizadoPor: null,
+    actualizadoFecha: null,
+    campos: '{"NOMBRE_COMPLETO":{"fuente":"nombre"}}',
+    salida: 'CV PUBLICO APP.pdf',
   },
 ]
 
 afterEach(() => {
   vi.clearAllMocks()
+})
+
+describe('PdfTemplate DTO (C10)', () => {
+  it('expone los 10 campos del contrato del GET', () => {
+    expect(Object.keys(templates[0]!)).toEqual([
+      'documento',
+      'plantilla',
+      'tokens',
+      'ultimaCarga',
+      'version',
+      'activo',
+      'actualizadoPor',
+      'actualizadoFecha',
+      'campos',
+      'salida',
+    ])
+  })
 })
 
 describe('getPdfTemplates', () => {
@@ -125,8 +151,51 @@ describe('uploadPdfTemplate', () => {
   })
 })
 
+describe('deletePdfTemplate', () => {
+  it('hace DELETE /pdf-templates/{clave} y resuelve con 204 sin cuerpo', async () => {
+    mocks.delete.mockResolvedValue({ data: undefined, status: 204, ok: true })
+
+    await deletePdfTemplate('CV_PUBLICO_APP')
+
+    expect(mocks.delete).toHaveBeenCalledTimes(1)
+    expect(mocks.delete).toHaveBeenCalledWith('/pdf-templates/CV_PUBLICO_APP')
+  })
+
+  it('codifica la clave de la URL', async () => {
+    mocks.delete.mockResolvedValue({ data: undefined, status: 204, ok: true })
+
+    await deletePdfTemplate('CLAVE CON ESPACIOS')
+
+    expect(mocks.delete).toHaveBeenCalledWith('/pdf-templates/CLAVE%20CON%20ESPACIOS')
+  })
+
+  it('mapea TEMPLATE_NOT_FOUND al mensaje en español', async () => {
+    mocks.delete.mockRejectedValue({
+      message: 'Error 400',
+      status: 400,
+      error: 'TEMPLATE_NOT_FOUND',
+    })
+
+    await expect(deletePdfTemplate('NO_EXISTE')).rejects.toEqual({
+      message: 'Plantilla no encontrada',
+      status: 400,
+      error: 'TEMPLATE_NOT_FOUND',
+    })
+  })
+
+  it('mapea 403 a mensaje de permisos', async () => {
+    mocks.delete.mockRejectedValue({ message: 'Forbidden', status: 403 })
+
+    await expect(deletePdfTemplate('CV_PUBLICO_APP')).rejects.toEqual({
+      message: 'No tienes permisos para realizar esta acción',
+      status: 403,
+      error: undefined,
+    })
+  })
+})
+
 describe('mapPdfTemplateError', () => {
-  it('mapea los 4 códigos 400 del contrato C6', () => {
+  it('mapea los 4 códigos 400 del contrato C6 y TEMPLATE_NOT_FOUND (C10)', () => {
     expect(
       mapPdfTemplateError({ message: 'Error 400', status: 400, error: 'FILE_REQUIRED' }).message
     ).toBe('Selecciona un archivo PDF')
@@ -140,6 +209,9 @@ describe('mapPdfTemplateError', () => {
       mapPdfTemplateError({ message: 'Error 400', status: 400, error: 'TEMPLATE_WRITE_FAILED' })
         .message
     ).toBe('No se pudo guardar la plantilla en el servidor')
+    expect(
+      mapPdfTemplateError({ message: 'Error 400', status: 400, error: 'TEMPLATE_NOT_FOUND' }).message
+    ).toBe('Plantilla no encontrada')
   })
 
   it('mapea 403 a mensaje de permisos', () => {
