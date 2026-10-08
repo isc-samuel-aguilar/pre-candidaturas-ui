@@ -896,7 +896,7 @@ export function PrecandidatosTable({
                     <TableCell>{p.claveIfe}</TableCell>
                     {isDetailMode && <TableCell>{p.ocr}</TableCell>}
                     <TableCell>{p.curp}</TableCell>
-                    <TableCell>{p.rfcHomoclave}</TableCell>
+                    <TableCell>{p.homoclave}</TableCell>
                     {isDetailMode && (
                       <>
                         <TableCell>{p.accionAfirmativa}</TableCell>

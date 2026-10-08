@@ -29,6 +29,7 @@ interface RepresentationData {
 interface FolioFormData {
   folio: string
   email: string
+  telefono: string
   calle: string
   numero: string
   colonia: string
@@ -74,6 +75,7 @@ function createEmptyFormData(): FolioFormData {
   return {
     folio: '',
     email: '',
+    telefono: '',
     calle: '',
     numero: '',
     colonia: '',
@@ -99,6 +101,7 @@ function mapFolioToFormData(folio: Folio): FolioFormData {
   return {
     folio: folio.folio,
     email: folio.email,
+    telefono: folio.telefono ?? '',
     calle: folio.calle,
     numero: folio.numero,
     colonia: folio.colonia,
@@ -170,6 +173,7 @@ export function FolioForm({
       setFolioData({
         folio: dummyDataToFill.folio,
         email: dummyDataToFill.email,
+        telefono: '',
         calle: dummyDataToFill.calle,
         numero: dummyDataToFill.numero,
         colonia: dummyDataToFill.colonia,
@@ -286,6 +290,7 @@ export function FolioForm({
       const updateData: UpdateFolioRequest = {
         folio: folioData.folio,
         email: folioData.email,
+        telefono: folioData.telefono,
         calle: folioData.calle,
         numero: folioData.numero,
         colonia: folioData.colonia,
@@ -306,6 +311,7 @@ export function FolioForm({
       const createData: CreateFolioRequest = {
         folio: folioData.folio,
         email: folioData.email,
+        telefono: folioData.telefono,
         calle: folioData.calle,
         numero: folioData.numero,
         colonia: folioData.colonia,

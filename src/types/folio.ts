@@ -32,6 +32,7 @@ export interface Folio {
   id: number
   folio: string
   email: string
+  telefono?: string
   calle: string
   numero: string
   colonia: string
@@ -51,6 +52,7 @@ export interface Folio {
 export interface CreateFolioRequest {
   folio: string
   email: string
+  telefono?: string
   calle: string
   numero: string
   colonia: string
@@ -64,6 +66,7 @@ export interface CreateFolioRequest {
 export interface UpdateFolioRequest {
   folio: string
   email: string
+  telefono?: string
   calle: string
   numero: string
   colonia: string

@@ -54,7 +54,7 @@ export interface Precandidato {
   claveIfe: string
   ocr: string
   curp: string
-  rfcHomoclave: string
+  homoclave: string
   municipioDondeNacio: string
   estadoDondeNacio: string
   ocupacion: string

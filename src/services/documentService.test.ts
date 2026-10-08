@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getDocumentTypes,
   getGeneratedDocumentTypes,
+  getDemarcationDocumentTypes,
   getDocumentsByPrecandidato,
   uploadDocument,
   deleteDocument,
@@ -68,6 +69,18 @@ const generatedDocumentTypes: KeyValueCatalog[] = [
     value: 'FORMATO DE DECLARACION APP.pdf',
     type: 'GENERATED_DOCUMENT',
     description: 'FORMATO DE DECLARACION APP',
+    createdDate: '2026-01-01T00:00:00',
+  },
+]
+
+// C11 (task-ui-19): documentos que pertenecen a la demarcación (FUR)
+const demarcationDocumentTypes: KeyValueCatalog[] = [
+  {
+    id: 20,
+    key: 'DOCUMENT_TYPE_DEMARCATION',
+    value: 'FORMATO UNICO DE REGISTRO (FUR) APP.pdf',
+    type: 'String',
+    description: 'FORMATO UNICO DE REGISTRO (FUR) APP',
     createdDate: '2026-01-01T00:00:00',
   },
 ]
@@ -169,6 +182,51 @@ describe('getGeneratedDocumentTypes', () => {
       status: 500,
       error: undefined,
     })
+  })
+})
+
+describe('getDemarcationDocumentTypes', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    mocks.get.mockReset()
+  })
+
+  it('calls the key-value-catalogs endpoint with DOCUMENT_TYPE_DEMARCATION', async () => {
+    mocks.get.mockResolvedValue({ data: demarcationDocumentTypes, status: 200, ok: true })
+
+    const result = await getDemarcationDocumentTypes()
+
+    expect(mocks.get).toHaveBeenCalledWith('/key-value-catalogs/key/DOCUMENT_TYPE_DEMARCATION')
+    expect(result).toEqual(demarcationDocumentTypes)
+  })
+
+  it('does not reuse the other catalog caches (its own cache key)', async () => {
+    localStorage.setItem('document_type_cache', JSON.stringify(documentTypes))
+    localStorage.setItem('document_type_cache_time', Date.now().toString())
+    localStorage.setItem(
+      'generated_document_type_cache',
+      JSON.stringify(generatedDocumentTypes)
+    )
+    localStorage.setItem('generated_document_type_cache_time', Date.now().toString())
+    mocks.get.mockResolvedValue({ data: demarcationDocumentTypes, status: 200, ok: true })
+
+    const result = await getDemarcationDocumentTypes()
+
+    expect(mocks.get).toHaveBeenCalledWith('/key-value-catalogs/key/DOCUMENT_TYPE_DEMARCATION')
+    expect(result).toEqual(demarcationDocumentTypes)
+  })
+
+  it('returns its own cached values through localStorage without calling the API', async () => {
+    localStorage.setItem(
+      'demarcation_document_type_cache',
+      JSON.stringify(demarcationDocumentTypes)
+    )
+    localStorage.setItem('demarcation_document_type_cache_time', Date.now().toString())
+
+    const result = await getDemarcationDocumentTypes()
+
+    expect(result).toEqual(demarcationDocumentTypes)
+    expect(mocks.get).not.toHaveBeenCalled()
   })
 })
 

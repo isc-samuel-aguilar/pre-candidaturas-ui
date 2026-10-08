@@ -33,6 +33,7 @@ import { useNavigate, Link } from '@tanstack/react-router'
 import type { DemarcacionRow, DemarcacionStatus } from '../../../../types/demarcacion'
 import { StatusEnum } from '../../../../types/enums'
 import { PrecandidatosTable } from '../../../../components/PrecandidatosTable'
+import { DemarcacionDocumentsTable } from './DemarcacionDocumentsTable'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos' },
@@ -63,6 +64,10 @@ interface RowEditState {
   saving: boolean
 }
 
+function getVisibleLabel(row: DemarcacionRow): string {
+  return row.catalogo.alias || row.catalogo.demarcacion
+}
+
 function deriveRowEdit(row: DemarcacionRow): RowEditState {
   const currentStatus = row.folioDemarcacion?.status
   return {
@@ -90,6 +95,9 @@ export function DemarcacionTable({
   const [searchText, setSearchText] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+  const [expandedBranches, setExpandedBranches] = useState<Map<number, 'pre' | 'fur'>>(
+    new Map()
+  )
   const [rowEdits, setRowEdits] = useState<Map<number, RowEditState>>(new Map())
   const fileInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
   const navigate = useNavigate()
@@ -98,22 +106,29 @@ export function DemarcacionTable({
   const totalColumns = isValidateMode ? 7 : 6
 
   const filteredDemarcaciones = useMemo(() => {
-    return demarcaciones.filter((d) => {
-      const matchesSearch =
-        searchText === '' ||
-        (d.catalogo.alias || d.catalogo.demarcacion)
-          .toLowerCase()
-          .includes(searchText.toLowerCase())
+    return demarcaciones
+      .filter((d) => {
+        const matchesSearch =
+          searchText === '' ||
+          getVisibleLabel(d).toLowerCase().includes(searchText.toLowerCase())
 
-      let matchesStatus = true
-      if (statusFilter === '__null__') {
-        matchesStatus = d.status === null
-      } else if (statusFilter !== '') {
-        matchesStatus = d.status === statusFilter
-      }
+        let matchesStatus = true
+        if (statusFilter === '__null__') {
+          matchesStatus = d.status === null
+        } else if (statusFilter !== '') {
+          matchesStatus = d.status === statusFilter
+        }
 
-      return matchesSearch && matchesStatus
-    })
+        return matchesSearch && matchesStatus
+      })
+      .sort((a, b) => {
+        const labelA = getVisibleLabel(a)
+        const labelB = getVisibleLabel(b)
+        const isGubernaturaA = /^gubernatura/i.test(labelA.trim())
+        const isGubernaturaB = /^gubernatura/i.test(labelB.trim())
+        if (isGubernaturaA !== isGubernaturaB) return isGubernaturaA ? -1 : 1
+        return labelA.localeCompare(labelB, 'es')
+      })
   }, [demarcaciones, searchText, statusFilter])
 
   const handleFileSelect = async (demarcacion: DemarcacionRow, file: File | null) => {
@@ -154,12 +169,35 @@ export function DemarcacionTable({
   }
 
   const handleToggleExpand = (catalogoId: number) => {
+    const isCollapsing = expandedRows.has(catalogoId)
+
     setExpandedRows((prev) => {
       const next = new Set(prev)
       if (next.has(catalogoId)) {
         next.delete(catalogoId)
       } else {
         next.add(catalogoId)
+      }
+      return next
+    })
+
+    if (isCollapsing) {
+      setExpandedBranches((prev) => {
+        if (!prev.has(catalogoId)) return prev
+        const next = new Map(prev)
+        next.delete(catalogoId)
+        return next
+      })
+    }
+  }
+
+  const handleToggleBranch = (catalogoId: number, branch: 'pre' | 'fur') => {
+    setExpandedBranches((prev) => {
+      const next = new Map(prev)
+      if (next.get(catalogoId) === branch) {
+        next.delete(catalogoId)
+      } else {
+        next.set(catalogoId, branch)
       }
       return next
     })
@@ -231,6 +269,9 @@ export function DemarcacionTable({
 
   return (
     <>
+      <Typography variant="h6" sx={{ mb: 1 }}>
+        Demarcaciones
+      </Typography>
       <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
         <TextField
           size="small"
@@ -269,7 +310,7 @@ export function DemarcacionTable({
               <TableCell padding="checkbox" />
               <TableCell>Demarcación</TableCell>
               <TableCell align="center">Pre Candidatos</TableCell>
-              {!isValidateMode && <TableCell align="center">Subir</TableCell>}
+              {!isValidateMode && <TableCell align="center">Excel</TableCell>}
               {!isValidateMode && <TableCell align="center">Eliminar</TableCell>}
               <TableCell align="center">Status</TableCell>
               {isValidateMode && <TableCell align="center">Validar</TableCell>}
@@ -470,15 +511,72 @@ export function DemarcacionTable({
                     <TableRow key={`${row.catalogo.id}-expanded`}>
                       <TableCell colSpan={totalColumns} sx={{ p: 0, backgroundColor: '#f5f5f5' }}>
                         {row.folioDemarcacion ? (
-                          <PrecandidatosTable
-                            folioId={row.folioDemarcacion.folioId}
-                            demarcacionName={row.catalogo.demarcacion}
-                            mode="excel"
-                            demarcacionStatus={row.status}
-                            allowDocActions={!isValidateMode}
-                            allowDocValidation={isValidateMode}
-                            groupDocuments
-                          />
+                          <Table size="small">
+                            <TableBody>
+                              <TableRow hover>
+                                <TableCell>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <IconButton
+                                      size="small"
+                                      aria-label="Expandir Pre Candidatos"
+                                      onClick={() => handleToggleBranch(row.catalogo.id, 'pre')}
+                                    >
+                                      {expandedBranches.get(row.catalogo.id) === 'pre' ? (
+                                        <KeyboardArrowDownIcon />
+                                      ) : (
+                                        <KeyboardArrowRightIcon />
+                                      )}
+                                    </IconButton>
+                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                      Pre Candidatos
+                                    </Typography>
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                              {expandedBranches.get(row.catalogo.id) === 'pre' && (
+                                <TableRow>
+                                  <TableCell sx={{ pl: 6 }}>
+                                    <PrecandidatosTable
+                                      folioId={row.folioDemarcacion.folioId}
+                                      demarcacionName={row.catalogo.demarcacion}
+                                      mode="excel"
+                                      demarcacionStatus={row.status}
+                                      allowDocActions={!isValidateMode}
+                                      allowDocValidation={isValidateMode}
+                                      groupDocuments
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                              <TableRow hover>
+                                <TableCell>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <IconButton
+                                      size="small"
+                                      aria-label="Expandir FORMATO UNICO DE REGISTRO (FUR) APP"
+                                      onClick={() => handleToggleBranch(row.catalogo.id, 'fur')}
+                                    >
+                                      {expandedBranches.get(row.catalogo.id) === 'fur' ? (
+                                        <KeyboardArrowDownIcon />
+                                      ) : (
+                                        <KeyboardArrowRightIcon />
+                                      )}
+                                    </IconButton>
+                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                      FORMATO UNICO DE REGISTRO (FUR) APP
+                                    </Typography>
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                              {expandedBranches.get(row.catalogo.id) === 'fur' && (
+                                <TableRow>
+                                  <TableCell sx={{ pl: 6 }}>
+                                    <DemarcacionDocumentsTable mode={mode} />
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
                         ) : (
                           <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
                             No hay datos disponibles para esta demarcación

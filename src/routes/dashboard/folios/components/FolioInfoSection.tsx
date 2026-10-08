@@ -3,6 +3,7 @@ import { TextField, Stack } from '@mui/material'
 interface FolioInfoData {
   folio: string
   email: string
+  telefono: string
   calle: string
   numero: string
   colonia: string
@@ -47,7 +48,16 @@ export function FolioInfoSection({
           error={!!errors.email}
           helperText={errors.email}
           size="small"
-          sx={{ flex: 1, minWidth: 200 }}
+          sx={{ width: 220 }}
+        />
+        <TextField
+          label="Teléfono"
+          value={values.telefono}
+          onChange={(e) => onChange('telefono', e.target.value)}
+          error={!!errors.telefono}
+          helperText={errors.telefono}
+          size="small"
+          sx={{ width: 150 }}
         />
       </Stack>
       <Stack direction="row" spacing={1.5} sx={{ mb: 1.5 }}>

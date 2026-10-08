@@ -54,7 +54,7 @@ const precandidato: Precandidato = {
   claveIfe: '00000000000000',
   ocr: '',
   curp: 'LORM880101MDFXXX01',
-  rfcHomoclave: 'LORM880101AA1',
+  homoclave: 'LORM880101AA1',
   municipioDondeNacio: '',
   estadoDondeNacio: '',
   ocupacion: '',

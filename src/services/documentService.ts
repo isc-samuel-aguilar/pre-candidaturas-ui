@@ -22,9 +22,11 @@ function mapApiError(error: ApiError): DocumentError {
 }
 
 export const GENERATED_DOCUMENT_KEY = 'GENERATED_DOCUMENT'
+export const DEMARCATION_DOCUMENT_KEY = 'DOCUMENT_TYPE_DEMARCATION'
 
 const DOCUMENT_TYPE_CACHE_KEY = 'document_type_cache'
 const GENERATED_DOCUMENT_CACHE_KEY = 'generated_document_type_cache'
+const DEMARCATION_DOCUMENT_CACHE_KEY = 'demarcation_document_type_cache'
 const CACHE_TTL = 6 * 60 * 60 * 1000
 
 function getCache(cacheKey: string): KeyValueCatalog[] | null {
@@ -71,6 +73,10 @@ export async function getDocumentTypes(): Promise<KeyValueCatalog[]> {
 
 export async function getGeneratedDocumentTypes(): Promise<KeyValueCatalog[]> {
   return fetchCatalogTypes(GENERATED_DOCUMENT_CACHE_KEY, GENERATED_DOCUMENT_KEY)
+}
+
+export async function getDemarcationDocumentTypes(): Promise<KeyValueCatalog[]> {
+  return fetchCatalogTypes(DEMARCATION_DOCUMENT_CACHE_KEY, DEMARCATION_DOCUMENT_KEY)
 }
 
 export async function getDocumentsByPrecandidato(
