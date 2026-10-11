@@ -7,7 +7,14 @@ import type { DemarcacionRow, KeyValueCatalog } from '../../../../types/demarcac
 
 const mocks = vi.hoisted(() => ({
   useNavigate: vi.fn(),
+  useAuth: vi.fn(),
   getDemarcationDocumentTypes: vi.fn(),
+  getDemarcationDocuments: vi.fn(),
+  uploadDemarcationDocument: vi.fn(),
+  updateDemarcationDocumentStatus: vi.fn(),
+  deleteDemarcationDocument: vi.fn(),
+  downloadDemarcationDocumentFile: vi.fn(),
+  generateDemarcationDocument: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -42,7 +49,23 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('../../../../services/documentService', () => ({
+  DEMARCATION_DOCUMENT_KEY: 'DOCUMENT_TYPE_DEMARCATION',
   getDemarcationDocumentTypes: mocks.getDemarcationDocumentTypes,
+  getDemarcationDocuments: mocks.getDemarcationDocuments,
+  uploadDemarcationDocument: mocks.uploadDemarcationDocument,
+  updateDemarcationDocumentStatus: mocks.updateDemarcationDocumentStatus,
+  deleteDemarcationDocument: mocks.deleteDemarcationDocument,
+  downloadDemarcationDocumentFile: mocks.downloadDemarcationDocumentFile,
+  generateDemarcationDocument: mocks.generateDemarcationDocument,
+  toDocumentoKey: (value: string) =>
+    value
+      .replace(/\.pdf$/i, '')
+      .replace(/[()]/g, '')
+      .replace(/ /g, '_'),
+}))
+
+vi.mock('../../../../contexts/AuthContext', () => ({
+  useAuth: mocks.useAuth,
 }))
 
 vi.mock('../../../../components/PrecandidatosTable', () => ({
@@ -181,6 +204,15 @@ function expandFirstRow() {
   fireEvent.click(expandButton)
 }
 
+// El componente ahora lee el rol vía useAuth → default global (ADMIN = sin auto-expansión)
+beforeEach(() => {
+  mocks.useNavigate.mockReturnValue(vi.fn())
+  mocks.useAuth.mockReturnValue({
+    token: 'token123',
+    user: { role: 'ADMIN', userId: 1, username: 'admin' },
+  })
+})
+
 describe('DemarcacionTable - link a la ficha de demarcación', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -236,7 +268,17 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.useNavigate.mockReturnValue(vi.fn())
+    mocks.useAuth.mockReturnValue({
+      token: 'token123',
+      user: { role: 'ADMIN', userId: 1, username: 'admin' },
+    })
     mocks.getDemarcationDocumentTypes.mockResolvedValue(demarcationDocumentTypes)
+    mocks.getDemarcationDocuments.mockResolvedValue([])
+    mocks.uploadDemarcationDocument.mockResolvedValue({})
+    mocks.updateDemarcationDocumentStatus.mockResolvedValue({})
+    mocks.deleteDemarcationDocument.mockResolvedValue(undefined)
+    mocks.downloadDemarcationDocumentFile.mockResolvedValue(undefined)
+    mocks.generateDemarcationDocument.mockResolvedValue(undefined)
   })
 
   it('sorts with GUBERNATURA first and the rest alphabetically by the visible label', () => {
@@ -326,7 +368,7 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     expect(table).toHaveAttribute('data-group-documents', 'true')
   })
 
-  it('loads the demarcation catalog and renders one row per document with disabled actions', async () => {
+  it('loads the catalog and passes the folio/demarcacion context to the FUR table (C12)', async () => {
     renderTable([registeredRow])
 
     expandFirstRow()
@@ -335,22 +377,39 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     const documentsTable = await screen.findByTestId('demarcacion-documents-table')
 
     expect(mocks.getDemarcationDocumentTypes).toHaveBeenCalledTimes(1)
+    // props received: folioId=5, folioDemarcacionId=10
+    expect(mocks.getDemarcationDocuments).toHaveBeenCalledWith(5, 10)
     // header + 2 catalog rows
     expect(within(documentsTable).getAllByRole('row')).toHaveLength(3)
     expect(
       within(documentsTable).getByText('OTRO DOC DEMARCACION.pdf')
     ).toBeInTheDocument()
+  })
+
+  it('enables upload and generate for ADMIN in upload mode on a VALIDA demarcation', async () => {
+    renderTable([registeredRow])
+
+    expandFirstRow()
+    fireEvent.click(screen.getByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP'))
+
+    const documentsTable = await screen.findByTestId('demarcacion-documents-table')
     const uploadButtons = within(documentsTable).getAllByRole('button', { name: 'Subir' })
     const deleteButtons = within(documentsTable).getAllByRole('button', {
       name: 'Eliminar',
     })
+    const generateButtons = within(documentsTable).getAllByRole('button', { name: 'Generar' })
+
     expect(uploadButtons).toHaveLength(2)
     expect(deleteButtons).toHaveLength(2)
-    uploadButtons.forEach((button) => expect(button).toBeDisabled())
+    // C12: ADMIN + VALIDA → Subir habilitado; Eliminar deshabilitado sin archivo
+    uploadButtons.forEach((button) => expect(button).toBeEnabled())
     deleteButtons.forEach((button) => expect(button).toBeDisabled())
+    // Generar solo en la fila FUR
+    expect(generateButtons).toHaveLength(1)
+    expect(generateButtons[0]).toBeEnabled()
   })
 
-  it('renders only the visual columns of the FUR table in upload mode', async () => {
+  it('renders the columns of the FUR table in upload mode with Generar (C12)', async () => {
     renderTable([registeredRow])
 
     expandFirstRow()
@@ -361,10 +420,10 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent)
 
-    expect(headers).toEqual(['Tipo', 'Nombre', 'Subir', 'Eliminar', 'Status'])
+    expect(headers).toEqual(['Tipo', 'Nombre', 'Subir', 'Eliminar', 'Status', 'Generar'])
   })
 
-  it('renders the validation columns disabled in the FUR table in validate mode', async () => {
+  it('renders the validation columns with Generar in the FUR table in validate mode', async () => {
     renderTable([registeredRow], 'validate')
 
     expandFirstRow()
@@ -382,6 +441,7 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
       'Validar',
       'Comentario',
       'Acciones',
+      'Generar',
     ])
     const saveButtons = within(documentsTable).getAllByRole('button', {
       name: 'Guardar',
@@ -391,8 +451,23 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     })
     expect(saveButtons).toHaveLength(2)
     expect(cancelButtons).toHaveLength(2)
+    // sin archivo persistido → deshabilitados
     saveButtons.forEach((button) => expect(button).toBeDisabled())
     cancelButtons.forEach((button) => expect(button).toBeDisabled())
+  })
+
+  it('keeps the expand disabled when the demarcation is only a catalog row (no folioDemarcacion)', () => {
+    renderTable([unregisteredRow])
+
+    // sin status no se puede expandir → la rama FUR nunca se ofrece
+    const [expandButton] = screen.getAllByRole('button')
+    if (!expandButton) throw new Error('Expand button not found')
+    expect(expandButton).toBeDisabled()
+
+    expect(
+      screen.queryByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByTestId('demarcacion-documents-table')).not.toBeInTheDocument()
   })
 
   it('collapses both branches when the demarcation row is collapsed', async () => {
@@ -407,6 +482,51 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     expect(
       screen.queryByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP')
     ).not.toBeInTheDocument()
+    expect(screen.queryByTestId('demarcacion-documents-table')).not.toBeInTheDocument()
+  })
+})
+
+describe('DemarcacionTable - auto-expansión por rol', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getDemarcationDocumentTypes.mockResolvedValue(demarcationDocumentTypes)
+    mocks.getDemarcationDocuments.mockResolvedValue([])
+  })
+
+  function setRole(role: string) {
+    mocks.useAuth.mockReturnValue({
+      token: 'token123',
+      user: { role, userId: 1, username: 'user' },
+    })
+  }
+
+  it('REGISTER: expanding the demarcation opens the Pre Candidatos branch automatically', () => {
+    setRole('REGISTER')
+    renderTable([registeredRow])
+
+    expandFirstRow()
+
+    expect(screen.getByTestId('precandidatos-table')).toBeInTheDocument()
+    expect(screen.queryByTestId('demarcacion-documents-table')).not.toBeInTheDocument()
+  })
+
+  it('VALIDATOR: expanding the demarcation opens the FUR branch automatically', async () => {
+    setRole('VALIDATOR')
+    renderTable([registeredRow], 'validate')
+
+    expandFirstRow()
+
+    expect(await screen.findByTestId('demarcacion-documents-table')).toBeInTheDocument()
+    expect(screen.queryByTestId('precandidatos-table')).not.toBeInTheDocument()
+  })
+
+  it('ADMIN: expanding the demarcation keeps both branches collapsed', () => {
+    setRole('ADMIN')
+    renderTable([registeredRow])
+
+    expandFirstRow()
+
+    expect(screen.queryByTestId('precandidatos-table')).not.toBeInTheDocument()
     expect(screen.queryByTestId('demarcacion-documents-table')).not.toBeInTheDocument()
   })
 })

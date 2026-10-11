@@ -124,7 +124,7 @@ export function PrecandidatosTable({
   allowDocValidation = false,
   groupDocuments = false,
 }: PrecandidatosTableProps) {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [precandidatos, setPrecandidatos] = useState<Precandidato[]>([])
   const [loading, setLoading] = useState(autoLoad)
   const [error, setError] = useState<string | null>(null)
@@ -178,16 +178,18 @@ export function PrecandidatosTable({
   }, [])
 
   const refreshDocs = useCallback(
-    async (precandidatoId: number) => {
+    async (precandidatoId: number): Promise<DocumentRow[] | null> => {
       try {
         const existingDocs = await getDocumentsByPrecandidato(precandidatoId)
+        const merged = mergeDocs(documentTypes, existingDocs)
         setRawDocsMap((prev) => new Map(prev).set(precandidatoId, existingDocs))
-        setDocumentsMap((prev) => new Map(prev).set(precandidatoId, mergeDocs(documentTypes, existingDocs)))
+        setDocumentsMap((prev) => new Map(prev).set(precandidatoId, merged))
         setDocsErrorIds((prev) => {
           const next = new Set(prev)
           next.delete(precandidatoId)
           return next
         })
+        return merged
       } catch {
         setRawDocsMap((prev) => {
           const next = new Map(prev)
@@ -200,6 +202,7 @@ export function PrecandidatosTable({
           return next
         })
         setDocsErrorIds((prev) => new Set(prev).add(precandidatoId))
+        return null
       }
     },
     [documentTypes]
@@ -218,10 +221,12 @@ export function PrecandidatosTable({
 
     setExpandedPrecandidato(precandidatoId)
 
-    if (!documentsMap.has(precandidatoId) && !loadingDocs.has(precandidatoId)) {
+    let rows = documentsMap.get(precandidatoId)
+
+    if (!rows && !loadingDocs.has(precandidatoId)) {
       setLoadingDocs((prev) => new Set(prev).add(precandidatoId))
       try {
-        await refreshDocs(precandidatoId)
+        rows = (await refreshDocs(precandidatoId)) ?? undefined
       } finally {
         setLoadingDocs((prev) => {
           const next = new Set(prev)
@@ -229,6 +234,17 @@ export function PrecandidatosTable({
           return next
         })
       }
+    }
+
+    // REGISTER: si el precandidato no tiene todos sus documentos válidos,
+    // se auto-expande la fila "Documentos por validar"
+    if (
+      user?.role === 'REGISTER' &&
+      rows &&
+      rows.length > 0 &&
+      !areAllDocsValid(rows)
+    ) {
+      setExpandedDocRow('validate')
     }
   }
 
@@ -866,6 +882,7 @@ export function PrecandidatosTable({
               const isLoadingDocs = loadingDocs.has(precandidatoId)
               const hasDocsError = docsErrorIds.has(precandidatoId)
               const validDocs = p.validDocsCount ?? 0
+              const loadedDocs = p.loadedDocsCount
               const totalDocs = documentTypes.length
               const docsValidStyle = getDocsValidColor(validDocs, totalDocs)
 
@@ -891,7 +908,9 @@ export function PrecandidatosTable({
                         fontWeight: 500,
                       }}
                     >
-                      {validDocs} / {totalDocs}
+                      {loadedDocs != null
+                        ? `${loadedDocs} / ${validDocs} / ${totalDocs}`
+                        : `— / ${validDocs} / ${totalDocs}`}
                     </TableCell>
                     <TableCell>{p.claveIfe}</TableCell>
                     {isDetailMode && <TableCell>{p.ocr}</TableCell>}

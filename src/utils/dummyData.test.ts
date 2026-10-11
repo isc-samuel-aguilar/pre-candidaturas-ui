@@ -147,9 +147,22 @@ describe('generateDummyData', () => {
 
     expect(data).not.toBeNull()
     expect(data?.folio).toBe('007')
+    expect(data?.email).toBe('007@test.com')
     expect(data?.user.username).toBe('AGS')
+    expect(data?.user.email).toBe('007@test.com')
     expect(data?.representations).toHaveLength(3)
     expect(data?.representations[0]?.representation).toBe('PROPIETARIA')
+  })
+
+  it('defaults to folio 001 when there are no registered folios', () => {
+    const data = generateDummyData('folios', '')
+
+    expect(data).not.toBeNull()
+    expect(data?.folio).toBe('001')
+    expect(data?.email).toBe('001@test.com')
+    expect(data?.user.email).toBe('001@test.com')
+    expect(data?.user.lastName).toBe('001 Lopez')
+    expect(data?.representations[0]?.paternalLastName).toBe('001 Lopez')
   })
 
   it('returns null and warns for an unknown path', () => {

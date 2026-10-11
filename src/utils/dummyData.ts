@@ -68,9 +68,11 @@ export interface DummyFolioData {
 
 export function generateDummyData(path: string, currentFolio: string): DummyFolioData | null {
   if (path === 'folios') {
+    // sin registros en "Folios Registrados" el primer folio es 001
+    const folio = currentFolio || '001'
     return {
-      folio: currentFolio,
-      email: `${currentFolio}@test.com`,
+      folio,
+      email: `${folio}@test.com`,
       calle: 'Av. Reforma',
       numero: '123',
       colonia: 'Centro',
@@ -80,7 +82,7 @@ export function generateDummyData(path: string, currentFolio: string): DummyFoli
       representations: [
         {
           representation: 'PROPIETARIA',
-          paternalLastName: `${currentFolio} Lopez`,
+          paternalLastName: `${folio} Lopez`,
           maternalLastName: 'Garcia',
           name: 'Juan Carlos',
           voterKey: 'ESESOS82040501H800',
@@ -88,7 +90,7 @@ export function generateDummyData(path: string, currentFolio: string): DummyFoli
         },
         {
           representation: 'SUPLENTE',
-          paternalLastName: `${currentFolio} Hernandez`,
+          paternalLastName: `${folio} Hernandez`,
           maternalLastName: 'Lopez',
           name: 'Maria Elena',
           voterKey: 'ESESOS82040502M800',
@@ -96,7 +98,7 @@ export function generateDummyData(path: string, currentFolio: string): DummyFoli
         },
         {
           representation: 'FINANCIERA',
-          paternalLastName: `${currentFolio} Garcia`,
+          paternalLastName: `${folio} Garcia`,
           maternalLastName: 'Hernandez',
           name: 'Pedro Antonio',
           voterKey: 'ESESOS82040503H800',
@@ -107,9 +109,9 @@ export function generateDummyData(path: string, currentFolio: string): DummyFoli
         username: 'AGS',
         password: 'Test_123',
         name: 'Juan Carlos',
-        lastName: `${currentFolio} Lopez`,
+        lastName: `${folio} Lopez`,
         motherLastName: 'Garcia',
-        email: `${currentFolio}@test.com`,
+        email: `${folio}@test.com`,
         phone: '4491234567',
       },
     }

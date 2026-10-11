@@ -1,5 +1,5 @@
 import { apiClient, type ApiError } from './apiClient'
-import type { Documento, KeyValueCatalog } from '../types/demarcacion'
+import type { DemarcationDocument, Documento, KeyValueCatalog } from '../types/demarcacion'
 import type { StatusEnum } from '../types/enums'
 
 export interface DocumentError {
@@ -167,8 +167,25 @@ const GENERATED_DOCUMENT_ERROR_MESSAGES: Record<string, string> = {
   PDF_GENERATION_FAILED: 'Error al generar el documento',
 }
 
+const DEMARCATION_DOCUMENT_ERROR_MESSAGES: Record<string, string> = {
+  FOLIO_DEMARCACION_NOT_FOUND: 'Demarcación no encontrada',
+  FOLIO_DEMARCACION_NOT_VALID: 'La demarcación debe estar válida para esta operación',
+  DOCUMENT_NOT_FOUND: 'Documento no encontrado',
+  DUPLICATE_DOCUMENT: 'Ya existe un documento de este tipo para la demarcación',
+  EMPTY_FILE: 'El archivo está vacío',
+  FILE_TOO_LARGE: 'El archivo excede el tamaño máximo permitido',
+  INVALID_FILE_TYPE: 'Tipo de archivo no permitido',
+  DOCUMENT_NO_FILE: 'El documento no tiene archivo asociado',
+  TEMPLATE_NOT_FOUND: 'Plantilla no disponible para este documento',
+  TEMPLATE_INVALID: 'Plantilla de documento inválida',
+  PDF_GENERATION_FAILED: 'Error al generar el documento',
+}
+
 export function toDocumentoKey(catalogValue: string): string {
-  return catalogValue.replace(/\.pdf$/i, '').replace(/ /g, '_')
+  return catalogValue
+    .replace(/\.pdf$/i, '')
+    .replace(/[()]/g, '')
+    .replace(/ /g, '_')
 }
 
 function getGeneratedFilename(response: Response, fallback: string): string {
@@ -226,6 +243,156 @@ export async function generateDocumentForSign(
       status: response.status,
       error: errorCode,
     })
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = getGeneratedFilename(response, `${documento}.pdf`)
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function demarcationDocumentsPath(folioId: number, fdmId: number): string {
+  return `/folios/${folioId}/demarcaciones/${fdmId}/documents`
+}
+
+export async function getDemarcationDocuments(
+  folioId: number,
+  fdmId: number
+): Promise<DemarcationDocument[]> {
+  try {
+    const response = await apiClient.get<DemarcationDocument[]>(
+      demarcationDocumentsPath(folioId, fdmId)
+    )
+    return response.data
+  } catch (error) {
+    throw mapApiError(error as ApiError)
+  }
+}
+
+export async function uploadDemarcationDocument(
+  folioId: number,
+  fdmId: number,
+  documentType: string,
+  file: File,
+  catalogKey?: string
+): Promise<DemarcationDocument> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const catalogParam = catalogKey ? `&catalogKey=${encodeURIComponent(catalogKey)}` : ''
+
+  try {
+    const response = await apiClient.post<DemarcationDocument>(
+      `${demarcationDocumentsPath(folioId, fdmId)}/upload?documentType=${encodeURIComponent(documentType)}${catalogParam}`,
+      formData,
+      { timeout: 30000 }
+    )
+    return response.data
+  } catch (error) {
+    throw mapApiError(error as ApiError)
+  }
+}
+
+export async function updateDemarcationDocumentStatus(
+  folioId: number,
+  fdmId: number,
+  documentId: number,
+  payload: UpdateDocumentStatusPayload
+): Promise<DemarcationDocument> {
+  try {
+    const response = await apiClient.patch<DemarcationDocument>(
+      `${demarcationDocumentsPath(folioId, fdmId)}/${documentId}`,
+      payload
+    )
+    return response.data
+  } catch (error) {
+    throw mapApiError(error as ApiError)
+  }
+}
+
+export async function deleteDemarcationDocument(
+  folioId: number,
+  fdmId: number,
+  documentId: number
+): Promise<void> {
+  try {
+    await apiClient.delete(demarcationDocumentsPath(folioId, fdmId) + `/${documentId}`)
+  } catch (error) {
+    throw mapApiError(error as ApiError)
+  }
+}
+
+export async function downloadDemarcationDocumentFile(
+  folioId: number,
+  fdmId: number,
+  doc: DemarcationDocument,
+  token: string
+): Promise<void> {
+  const apiUrl = import.meta.env.VITE_API_URL
+
+  const response = await fetch(
+    `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/${doc.id}/download`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}: ${response.statusText}`)
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = doc.originalFilename || doc.keyValueCatalogValue
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+async function mapDemarcationFetchError(response: Response): Promise<never> {
+  let errorCode: string | undefined
+  let apiMessage: string | undefined
+  try {
+    if (response.headers.get('content-type')?.includes('application/json')) {
+      const body = (await response.json()) as { message?: string; error?: string }
+      apiMessage = body?.message
+      errorCode = body?.error
+    }
+  } catch {
+    // ignore malformed error bodies
+  }
+
+  throw mapApiError({
+    message:
+      (errorCode && DEMARCATION_DOCUMENT_ERROR_MESSAGES[errorCode]) ||
+      apiMessage ||
+      `Error ${response.status}`,
+    status: response.status,
+    error: errorCode,
+  })
+}
+
+export async function generateDemarcationDocument(
+  folioId: number,
+  fdmId: number,
+  documento: string,
+  token: string
+): Promise<void> {
+  const apiUrl = import.meta.env.VITE_API_URL
+
+  const response = await fetch(
+    `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/generated?documento=${encodeURIComponent(documento)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+
+  if (!response.ok) {
+    await mapDemarcationFetchError(response)
   }
 
   const blob = await response.blob()

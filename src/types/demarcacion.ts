@@ -74,6 +74,7 @@ export interface Precandidato {
   fechaIngresoTrabajo: string
   fechaTerminacionTrabajo: string
   validDocsCount?: number
+  loadedDocsCount?: number
 }
 
 export interface Documento {
@@ -88,6 +89,21 @@ export interface Documento {
   objectKey: string | null
   originalFilename?: string | null
   preCandidatoId: number
+  createdDate: string
+}
+
+export interface DemarcationDocument {
+  id: number
+  folioDemarcacionId: number
+  keyValueCatalogId: number
+  keyValueCatalogKey: string
+  keyValueCatalogValue: string
+  keyValueCatalogDescription: string
+  status: StatusEnum | null
+  statusDescription?: string | null
+  bucketName: string | null
+  objectKey: string | null
+  originalFilename?: string | null
   createdDate: string
 }
 

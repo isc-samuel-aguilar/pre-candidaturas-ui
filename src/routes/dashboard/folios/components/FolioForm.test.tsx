@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { FolioForm } from './FolioForm'
+import { generateDummyData } from '../../../../utils/dummyData'
 import { StatusEnum } from '../../../../types/enums'
 import type { KeyValueCatalog } from '../../../../types/demarcacion'
 import type { Folio as FolioType } from '../../../../types/folio'
@@ -232,5 +233,28 @@ describe('FolioForm - Teléfono del folio (C11 / task-ui-19)', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ folio: 'F-2026', telefono: '5550001111' })
     )
+  })
+})
+
+describe('FolioForm - datos dummy (dummyData)', () => {
+  it('fills the folio Teléfono with the same value as the user Teléfono', () => {
+    renderForm({ dummyDataToFill: generateDummyData('folios', 'F-2026') })
+
+    const userPhone = field(accordion('Datos del Usuario'), 'Teléfono')
+    expect(userPhone).toHaveValue('4491234567')
+
+    const folioPhone = field(accordion('Datos del Folio'), 'Teléfono')
+    expect(folioPhone).toHaveValue(userPhone.getAttribute('value'))
+  })
+
+  it('fills the rest of the folio section from dummy data', () => {
+    renderForm({ dummyDataToFill: generateDummyData('folios', 'F-2026') })
+
+    const folioSection = accordion('Datos del Folio')
+    expect(field(folioSection, 'Folio')).toHaveValue('F-2026')
+    expect(field(folioSection, 'Correo Electrónico')).toHaveValue(
+      'F-2026@test.com'
+    )
+    expect(field(folioSection, 'Calle')).toHaveValue('Av. Reforma')
   })
 })

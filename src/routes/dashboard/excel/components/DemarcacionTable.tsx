@@ -32,6 +32,7 @@ import PeopleIcon from '@mui/icons-material/People'
 import { useNavigate, Link } from '@tanstack/react-router'
 import type { DemarcacionRow, DemarcacionStatus } from '../../../../types/demarcacion'
 import { StatusEnum } from '../../../../types/enums'
+import { useAuth } from '../../../../contexts/AuthContext'
 import { PrecandidatosTable } from '../../../../components/PrecandidatosTable'
 import { DemarcacionDocumentsTable } from './DemarcacionDocumentsTable'
 
@@ -80,6 +81,12 @@ function deriveRowEdit(row: DemarcacionRow): RowEditState {
   }
 }
 
+function getDefaultBranch(role: string | undefined): 'pre' | 'fur' | undefined {
+  if (role === 'REGISTER') return 'pre'
+  if (role === 'VALIDATOR') return 'fur'
+  return undefined
+}
+
 export function DemarcacionTable({
   demarcaciones,
   loading,
@@ -101,6 +108,7 @@ export function DemarcacionTable({
   const [rowEdits, setRowEdits] = useState<Map<number, RowEditState>>(new Map())
   const fileInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const isValidateMode = mode === 'validate'
   const totalColumns = isValidateMode ? 7 : 6
@@ -188,6 +196,15 @@ export function DemarcacionTable({
         next.delete(catalogoId)
         return next
       })
+    } else {
+      const defaultBranch = getDefaultBranch(user?.role)
+      if (defaultBranch) {
+        setExpandedBranches((prev) => {
+          const next = new Map(prev)
+          next.set(catalogoId, defaultBranch)
+          return next
+        })
+      }
     }
   }
 
@@ -571,7 +588,12 @@ export function DemarcacionTable({
                               {expandedBranches.get(row.catalogo.id) === 'fur' && (
                                 <TableRow>
                                   <TableCell sx={{ pl: 6 }}>
-                                    <DemarcacionDocumentsTable mode={mode} />
+                                    <DemarcacionDocumentsTable
+                                      folioId={row.folioDemarcacion.folioId}
+                                      folioDemarcacionId={row.folioDemarcacion.id}
+                                      demarcacionStatus={row.status}
+                                      mode={mode}
+                                    />
                                   </TableCell>
                                 </TableRow>
                               )}

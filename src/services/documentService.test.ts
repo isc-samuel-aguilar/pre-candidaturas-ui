@@ -4,14 +4,20 @@ import {
   getGeneratedDocumentTypes,
   getDemarcationDocumentTypes,
   getDocumentsByPrecandidato,
+  getDemarcationDocuments,
   uploadDocument,
+  uploadDemarcationDocument,
   deleteDocument,
+  deleteDemarcationDocument,
   downloadDocumentFile,
+  downloadDemarcationDocumentFile,
   generateDocumentForSign,
+  generateDemarcationDocument,
   toDocumentoKey,
   updateDocumentStatus,
+  updateDemarcationDocumentStatus,
 } from './documentService'
-import type { Documento, KeyValueCatalog } from '../types/demarcacion'
+import type { DemarcationDocument, Documento, KeyValueCatalog } from '../types/demarcacion'
 import { StatusEnum } from '../types/enums'
 
 const mocks = vi.hoisted(() => ({
@@ -96,6 +102,21 @@ const sampleDocument: Documento = {
   objectKey: 'key',
   originalFilename: null,
   preCandidatoId: 5,
+  createdDate: '2026-01-01T00:00:00',
+}
+
+const sampleDemarcationDocument: DemarcationDocument = {
+  id: 30,
+  folioDemarcacionId: 10,
+  keyValueCatalogId: 20,
+  keyValueCatalogKey: 'DOCUMENT_TYPE_DEMARCATION',
+  keyValueCatalogValue: 'FORMATO UNICO DE REGISTRO (FUR) APP.pdf',
+  keyValueCatalogDescription: 'FORMATO UNICO DE REGISTRO (FUR) APP',
+  status: StatusEnum.POR_VALIDAR,
+  statusDescription: null,
+  bucketName: 'bucket',
+  objectKey: 'folio-5/demarcacion-10/demarcacion-20-fur.pdf',
+  originalFilename: 'fur-app.pdf',
   createdDate: '2026-01-01T00:00:00',
 }
 
@@ -471,6 +492,25 @@ describe('toDocumentoKey', () => {
     expect(toDocumentoKey('CV PRIVADO App.PDF')).toBe('CV_PRIVADO_App')
     expect(toDocumentoKey('CV_PUBLICO_APP')).toBe('CV_PUBLICO_APP')
   })
+
+  // C12: el backend normaliza eliminando ( ) — la clave FUR no lleva parentesis
+  it('removes parentheses so the FUR key matches the backend template key', () => {
+    expect(toDocumentoKey('FORMATO UNICO DE REGISTRO (FUR) APP.pdf')).toBe(
+      'FORMATO_UNICO_DE_REGISTRO_FUR_APP'
+    )
+    expect(toDocumentoKey('FORMATO UNICO DE REGISTRO (FUR) APP')).toBe(
+      'FORMATO_UNICO_DE_REGISTRO_FUR_APP'
+    )
+    expect(toDocumentoKey('FORMATO_UNICO_DE_REGISTRO_FUR_APP')).toBe(
+      'FORMATO_UNICO_DE_REGISTRO_FUR_APP'
+    )
+  })
+
+  it('keeps the existing generated-document keys unchanged (no parentheses)', () => {
+    expect(toDocumentoKey('CV PUBLICO APP.pdf')).toBe('CV_PUBLICO_APP')
+    expect(toDocumentoKey('CV PRIVADO APP.pdf')).toBe('CV_PRIVADO_APP')
+    expect(toDocumentoKey('FORMATO DE DECLARACION APP.pdf')).toBe('FORMATO_DE_DECLARACION_APP')
+  })
 })
 
 describe('generateDocumentForSign', () => {
@@ -601,6 +641,364 @@ describe('generateDocumentForSign', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(generateDocumentForSign(7, 'CV_PUBLICO_APP', 'token123')).rejects.toEqual({
+      message: 'Acceso prohibido',
+      status: 403,
+      error: undefined,
+    })
+  })
+})
+
+// C12 (task-ui-20): documentos de la demarcación
+
+describe('getDemarcationDocuments', () => {
+  it('calls the nested documents endpoint for the folio/demarcacion', async () => {
+    mocks.get.mockResolvedValue({ data: [sampleDemarcationDocument], status: 200, ok: true })
+
+    const result = await getDemarcationDocuments(5, 10)
+
+    expect(mocks.get).toHaveBeenCalledWith('/folios/5/demarcaciones/10/documents')
+    expect(result).toEqual([sampleDemarcationDocument])
+  })
+
+  it('maps API errors to DocumentError', async () => {
+    mocks.get.mockRejectedValue({ message: 'No autorizado', status: 403 })
+
+    await expect(getDemarcationDocuments(5, 10)).rejects.toEqual({
+      message: 'No autorizado',
+      status: 403,
+      error: undefined,
+    })
+  })
+})
+
+describe('uploadDemarcationDocument', () => {
+  beforeEach(() => {
+    mocks.post.mockReset()
+  })
+
+  it('posts a FormData to the demarcation upload endpoint with catalogKey', async () => {
+    const file = new File(['content'], 'fur.pdf', { type: 'application/pdf' })
+    mocks.post.mockResolvedValue({ data: sampleDemarcationDocument, status: 201, ok: true })
+
+    const result = await uploadDemarcationDocument(
+      5,
+      10,
+      'FORMATO UNICO DE REGISTRO (FUR) APP.pdf',
+      file,
+      'DOCUMENT_TYPE_DEMARCATION'
+    )
+
+    expect(mocks.post).toHaveBeenCalledWith(
+      '/folios/5/demarcaciones/10/documents/upload?documentType=FORMATO%20UNICO%20DE%20REGISTRO%20(FUR)%20APP.pdf&catalogKey=DOCUMENT_TYPE_DEMARCATION',
+      expect.any(FormData),
+      { timeout: 30000 }
+    )
+    expect(result).toEqual(sampleDemarcationDocument)
+  })
+
+  it('omits catalogKey when not provided', async () => {
+    const file = new File(['content'], 'doc.pdf', { type: 'application/pdf' })
+    mocks.post.mockResolvedValue({ data: sampleDemarcationDocument, status: 201, ok: true })
+
+    await uploadDemarcationDocument(5, 10, 'OTRO DOC.pdf', file)
+
+    const [url] = mocks.post.mock.calls[0] ?? []
+    expect(String(url)).toContain('/folios/5/demarcaciones/10/documents/upload?')
+    expect(String(url)).not.toContain('catalogKey')
+  })
+
+  it('maps API errors to DocumentError (403 forbidden)', async () => {
+    const file = new File(['content'], 'doc.pdf', { type: 'application/pdf' })
+    mocks.post.mockRejectedValue({ message: 'Prohibido', status: 403 })
+
+    await expect(uploadDemarcationDocument(5, 10, 'OTRO DOC.pdf', file)).rejects.toEqual({
+      message: 'Prohibido',
+      status: 403,
+      error: undefined,
+    })
+  })
+})
+
+describe('updateDemarcationDocumentStatus', () => {
+  it('patches the demarcation document status on the nested route', async () => {
+    const updated = {
+      ...sampleDemarcationDocument,
+      status: StatusEnum.VALIDO,
+      statusDescription: 'OK',
+    }
+    mocks.patch.mockResolvedValue({ data: updated, status: 200, ok: true })
+
+    const result = await updateDemarcationDocumentStatus(5, 10, 30, {
+      status: StatusEnum.VALIDO,
+      statusDescription: 'OK',
+    })
+
+    expect(mocks.patch).toHaveBeenCalledWith('/folios/5/demarcaciones/10/documents/30', {
+      status: StatusEnum.VALIDO,
+      statusDescription: 'OK',
+    })
+    expect(result).toEqual(updated)
+  })
+
+  it('omits statusDescription from the body when not provided', async () => {
+    const updated = { ...sampleDemarcationDocument, status: StatusEnum.ERROR }
+    mocks.patch.mockResolvedValue({ data: updated, status: 200, ok: true })
+
+    await updateDemarcationDocumentStatus(5, 10, 30, { status: StatusEnum.ERROR })
+
+    expect(mocks.patch).toHaveBeenCalledWith('/folios/5/demarcaciones/10/documents/30', {
+      status: StatusEnum.ERROR,
+    })
+  })
+
+  it('maps API errors to DocumentError (404 not found)', async () => {
+    mocks.patch.mockRejectedValue({ message: 'Documento no encontrado', status: 404 })
+
+    await expect(
+      updateDemarcationDocumentStatus(5, 10, 999, { status: StatusEnum.VALIDO })
+    ).rejects.toEqual({
+      message: 'Documento no encontrado',
+      status: 404,
+      error: undefined,
+    })
+  })
+})
+
+describe('deleteDemarcationDocument', () => {
+  it('calls the nested delete endpoint', async () => {
+    mocks.delete.mockResolvedValue({ data: undefined, status: 204, ok: true })
+
+    await deleteDemarcationDocument(5, 10, 30)
+
+    expect(mocks.delete).toHaveBeenCalledWith('/folios/5/demarcaciones/10/documents/30')
+  })
+
+  it('maps API errors to DocumentError', async () => {
+    mocks.delete.mockRejectedValue({ message: 'Prohibido', status: 403 })
+
+    await expect(deleteDemarcationDocument(5, 10, 30)).rejects.toEqual({
+      message: 'Prohibido',
+      status: 403,
+      error: undefined,
+    })
+  })
+})
+
+describe('downloadDemarcationDocumentFile', () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('downloads using the nested download URL and bearer token', async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        blob: async () => new Blob(),
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    ;(URL as { createObjectURL: (blob: Blob) => string }).createObjectURL = vi.fn(
+      () => 'blob:mock'
+    )
+    ;(URL as { revokeObjectURL: (url: string) => void }).revokeObjectURL = vi.fn()
+
+    const anchors: HTMLAnchorElement[] = []
+    const originalCreateElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+      const el = originalCreateElement(tagName)
+      if (tagName === 'a') anchors.push(el as HTMLAnchorElement)
+      return el
+    })
+
+    await downloadDemarcationDocumentFile(5, 10, sampleDemarcationDocument, 'token123')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/folios\/5\/demarcaciones\/10\/documents\/30\/download$/),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer token123' },
+      })
+    )
+    expect(anchors[0]?.download).toBe('fur-app.pdf')
+  })
+
+  it('falls back to keyValueCatalogValue when originalFilename is missing', async () => {
+    const docNoName = { ...sampleDemarcationDocument, originalFilename: null }
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      blob: async () => new Blob(),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    ;(URL as { createObjectURL: (blob: Blob) => string }).createObjectURL = vi.fn(
+      () => 'blob:mock'
+    )
+    ;(URL as { revokeObjectURL: (url: string) => void }).revokeObjectURL = vi.fn()
+
+    const anchors: HTMLAnchorElement[] = []
+    const originalCreateElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+      const el = originalCreateElement(tagName)
+      if (tagName === 'a') anchors.push(el as HTMLAnchorElement)
+      return el
+    })
+
+    await downloadDemarcationDocumentFile(5, 10, docNoName, 'token123')
+
+    expect(anchors[0]?.download).toBe('FORMATO UNICO DE REGISTRO (FUR) APP.pdf')
+  })
+
+  it('throws when the download response is not ok', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      downloadDemarcationDocumentFile(5, 10, sampleDemarcationDocument, 'token123')
+    ).rejects.toThrow('Error 404')
+  })
+})
+
+describe('generateDemarcationDocument', () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  function stubPdfFetch(disposition: string | null) {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {
+        get: (name: string) => (name === 'Content-Disposition' ? disposition : null),
+      },
+      blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    ;(URL as { createObjectURL: (blob: Blob) => string }).createObjectURL = vi.fn(
+      () => 'blob:mock'
+    )
+    ;(URL as { revokeObjectURL: (url: string) => void }).revokeObjectURL = vi.fn()
+
+    const anchors: HTMLAnchorElement[] = []
+    const originalCreateElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+      const el = originalCreateElement(tagName)
+      if (tagName === 'a') anchors.push(el as HTMLAnchorElement)
+      return el
+    })
+
+    return { fetchMock, anchors }
+  }
+
+  it('calls the generated endpoint with the FUR documento key and bearer token', async () => {
+    const { fetchMock } = stubPdfFetch('attachment; filename="FORMATO UNICO DE REGISTRO (FUR) APP.pdf"')
+
+    await generateDemarcationDocument(
+      5,
+      10,
+      'FORMATO_UNICO_DE_REGISTRO_FUR_APP',
+      'token123'
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /\/folios\/5\/demarcaciones\/10\/documents\/generated\?documento=FORMATO_UNICO_DE_REGISTRO_FUR_APP$/
+      ),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer token123' },
+      })
+    )
+  })
+
+  it('uses the filename from the Content-Disposition header', async () => {
+    const { anchors } = stubPdfFetch('attachment; filename="salida-fur.pdf"')
+
+    await generateDemarcationDocument(5, 10, 'FORMATO_UNICO_DE_REGISTRO_FUR_APP', 'token123')
+
+    expect(anchors[0]?.download).toBe('salida-fur.pdf')
+  })
+
+  it('falls back to <documento>.pdf when Content-Disposition is missing', async () => {
+    const { anchors } = stubPdfFetch(null)
+
+    await generateDemarcationDocument(5, 10, 'FORMATO_UNICO_DE_REGISTRO_FUR_APP', 'token123')
+
+    expect(anchors[0]?.download).toBe('FORMATO_UNICO_DE_REGISTRO_FUR_APP.pdf')
+  })
+
+  it('maps FOLIO_DEMARCACION_NOT_VALID to a spanish message', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      headers: {
+        get: (name: string) => (name === 'content-type' ? 'application/json' : null),
+      },
+      json: async () => ({ message: 'ignored', error: 'FOLIO_DEMARCACION_NOT_VALID' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      generateDemarcationDocument(5, 10, 'FORMATO_UNICO_DE_REGISTRO_FUR_APP', 'token123')
+    ).rejects.toEqual({
+      message: 'La demarcación debe estar válida para esta operación',
+      status: 400,
+      error: 'FOLIO_DEMARCACION_NOT_VALID',
+    })
+  })
+
+  it('maps TEMPLATE_NOT_FOUND to a spanish message', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      headers: {
+        get: (name: string) => (name === 'content-type' ? 'application/json' : null),
+      },
+      json: async () => ({ message: 'ignored', error: 'TEMPLATE_NOT_FOUND' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      generateDemarcationDocument(5, 10, 'FORMATO_UNICO_DE_REGISTRO_FUR_APP', 'token123')
+    ).rejects.toEqual({
+      message: 'Plantilla no disponible para este documento',
+      status: 400,
+      error: 'TEMPLATE_NOT_FOUND',
+    })
+  })
+
+  it('falls back to the API message for unknown error codes', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: {
+        get: (name: string) => (name === 'content-type' ? 'application/json' : null),
+      },
+      json: async () => ({ message: 'Acceso prohibido' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      generateDemarcationDocument(5, 10, 'FORMATO_UNICO_DE_REGISTRO_FUR_APP', 'token123')
+    ).rejects.toEqual({
       message: 'Acceso prohibido',
       status: 403,
       error: undefined,

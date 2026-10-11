@@ -26,7 +26,8 @@ const LOCKOUT_DURATION_MS = 5 * 60 * 1000
 const DEV_QUICK_FILL = [
   { label: 'Admin', username: 'admin', password: 'adminPassword' },
   { label: 'Validador', username: 'validator001', password: 'Test_123' },
-  { label: 'Registro', username: '002AGS', password: 'Test_123' },
+  { label: '001AGS', username: '001AGS', password: 'Test_123' },
+  { label: '002AGS', username: '002AGS', password: 'Test_123' },
 ] as const
 
 function LoginPage() {

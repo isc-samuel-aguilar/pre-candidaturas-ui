@@ -31,7 +31,12 @@ vi.mock('../services/documentService', () => ({
   downloadDocumentFile: mocks.downloadDocumentFile,
   generateDocumentForSign: mocks.generateDocumentForSign,
   // mismo helper que documentService.toDocumentoKey (el módulo entero está mockeado)
-  toDocumentoKey: (value: string) => value.replace(/\.pdf$/i, '').replace(/ /g, '_'),
+  // C12: también elimina ( ) para la clave FUR
+  toDocumentoKey: (value: string) =>
+    value
+      .replace(/\.pdf$/i, '')
+      .replace(/[()]/g, '')
+      .replace(/ /g, '_'),
   updateDocumentStatus: mocks.updateDocumentStatus,
   // mismo valor que documentService.GENERATED_DOCUMENT_KEY (constante en producción)
   GENERATED_DOCUMENT_KEY: 'GENERATED_DOCUMENT',
@@ -276,8 +281,8 @@ describe('PrecandidatosTable - Docs Válidos column', () => {
     const texts = within(bodyRow)
       .getAllByRole('cell')
       .map((cell) => cell.textContent)
-    expect(texts.indexOf('0 / 1')).toBe(texts.indexOf('Titular') + 1)
-    expect(texts.indexOf('00000000000000')).toBe(texts.indexOf('0 / 1') + 1)
+    expect(texts.indexOf('— / 0 / 1')).toBe(texts.indexOf('Titular') + 1)
+    expect(texts.indexOf('00000000000000')).toBe(texts.indexOf('— / 0 / 1') + 1)
   })
 
   it('places the Docs Válidos header between Calidad and Clave INE in detail mode', async () => {
@@ -289,52 +294,76 @@ describe('PrecandidatosTable - Docs Válidos column', () => {
     expect(claveIne).toBe(docsValidos + 1)
   })
 
-  it('renders the partial format 3 / 6 with a yellow cell', async () => {
+  it('renders the fallback format — / 3 / 6 with a yellow cell', async () => {
     mocks.getDocumentTypes.mockResolvedValue(sixDocumentTypes)
     mocks.getPrecandidatos.mockResolvedValue([{ ...precandidato, validDocsCount: 3 }])
 
     await renderTable()
 
-    const cell = screen.getByText('3 / 6')
+    const cell = screen.getByText('— / 3 / 6')
     expect(cell).toHaveStyle({ backgroundColor: '#FFD100', color: '#000000' })
   })
 
-  it('renders 6 / 6 with a green cell when every document is valid', async () => {
+  it('renders 4 / 3 / 6 with a yellow cell when loadedDocsCount is present', async () => {
+    mocks.getDocumentTypes.mockResolvedValue(sixDocumentTypes)
+    mocks.getPrecandidatos.mockResolvedValue([
+      { ...precandidato, validDocsCount: 3, loadedDocsCount: 4 },
+    ])
+
+    await renderTable()
+
+    const cell = screen.getByText('4 / 3 / 6')
+    expect(cell).toHaveStyle({ backgroundColor: '#FFD100', color: '#000000' })
+  })
+
+  it('renders 0 / 0 / 6 in gray when nothing is loaded and nothing is valid', async () => {
+    mocks.getDocumentTypes.mockResolvedValue(sixDocumentTypes)
+    mocks.getPrecandidatos.mockResolvedValue([
+      { ...precandidato, validDocsCount: 0, loadedDocsCount: 0 },
+    ])
+
+    await renderTable()
+
+    const cell = screen.getByText('0 / 0 / 6')
+    expect(cell).toHaveStyle({ backgroundColor: '#E0E0E0', color: '#757575' })
+  })
+
+  it('renders the fallback format — / 6 / 6 with a green cell when every document is valid', async () => {
     mocks.getDocumentTypes.mockResolvedValue(sixDocumentTypes)
     mocks.getPrecandidatos.mockResolvedValue([{ ...precandidato, validDocsCount: 6 }])
 
     await renderTable()
 
-    const cell = screen.getByText('6 / 6')
+    const cell = screen.getByText('— / 6 / 6')
     expect(cell).toHaveStyle({ backgroundColor: '#4CAF50', color: '#FFFFFF' })
   })
 
-  it('renders 0 / 6 with a gray cell when there are no valid documents', async () => {
+  it('renders the fallback format — / 0 / 6 with a gray cell when there are no valid documents', async () => {
     mocks.getDocumentTypes.mockResolvedValue(sixDocumentTypes)
     mocks.getPrecandidatos.mockResolvedValue([{ ...precandidato, validDocsCount: 0 }])
 
     await renderTable()
 
-    const cell = screen.getByText('0 / 6')
+    const cell = screen.getByText('— / 0 / 6')
     expect(cell).toHaveStyle({ backgroundColor: '#E0E0E0', color: '#757575' })
   })
 
-  it('falls back to 0 / 6 in gray when validDocsCount is absent from the backend', async () => {
+  it('falls back to — / 0 / 6 in gray when validDocsCount is absent from the backend', async () => {
     mocks.getDocumentTypes.mockResolvedValue(sixDocumentTypes)
 
     await renderTable()
 
-    const cell = screen.getByText('0 / 6')
+    const cell = screen.getByText('— / 0 / 6')
     expect(cell).toHaveStyle({ backgroundColor: '#E0E0E0', color: '#757575' })
   })
 
-  it('renders 0 / 0 in gray when the document type catalog is empty', async () => {
+  it('renders the fallback format — / 0 / 0 in gray when the document type catalog is empty', async () => {
     mocks.getDocumentTypes.mockResolvedValue([])
     mocks.getPrecandidatos.mockResolvedValue([{ ...precandidato, validDocsCount: 0 }])
 
     await renderTable()
 
-    const cell = screen.getByText('0 / 0')
+    const cell = screen.getByText('— / 0 / 0')
     expect(cell).toHaveStyle({ backgroundColor: '#E0E0E0', color: '#757575' })
   })
 
@@ -629,5 +658,68 @@ describe('PrecandidatosTable - agrupación Documentos', () => {
     )
     const [,,, catalogKey] = mocks.uploadDocument.mock.calls[0] ?? []
     expect(catalogKey).toBeUndefined()
+  })
+})
+
+describe('PrecandidatosTable - auto-expansión "Documentos por validar" (REGISTER)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getPrecandidatos.mockResolvedValue([precandidato])
+    mocks.getDocumentTypes.mockResolvedValue(documentTypes)
+  })
+
+  async function renderGroupedAndExpand() {
+    render(
+      <PrecandidatosTable
+        folioId={1}
+        demarcacionName="ASIENTOS"
+        demarcacionStatus={StatusEnum.VALIDO}
+        groupDocuments
+        allowDocActions={false}
+        allowDocValidation
+      />
+    )
+
+    const [expandButton] = await screen.findAllByRole('button')
+    if (!expandButton) throw new Error('Expand button not found')
+    fireEvent.click(expandButton)
+
+    await waitFor(() => expect(mocks.getDocumentsByPrecandidato).toHaveBeenCalled())
+  }
+
+  it('auto-expands the documents row for REGISTER when not every document is VALIDO', async () => {
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'REGISTER' } })
+    // status POR_VALIDAR → no todos válidos
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([documentFixture])
+
+    await renderGroupedAndExpand()
+
+    // sin clic en "Expandir Documentos por validar", la tabla de documentos ya se ve
+    expect(await screen.findByText('ine.pdf')).toBeInTheDocument()
+    expect(screen.getByText('Tipo')).toBeInTheDocument()
+  })
+
+  it('keeps the documents row collapsed for REGISTER when every document is VALIDO', async () => {
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'REGISTER' } })
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([
+      { ...documentFixture, status: StatusEnum.VALIDO },
+    ])
+
+    await renderGroupedAndExpand()
+
+    expect(await screen.findByText('Documentos por validar')).toBeInTheDocument()
+    expect(screen.queryByText('Tipo')).not.toBeInTheDocument()
+    expect(screen.queryByText('ine.pdf')).not.toBeInTheDocument()
+  })
+
+  it('keeps the documents row collapsed for other roles even when docs are incomplete', async () => {
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'VALIDATOR' } })
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([documentFixture])
+
+    await renderGroupedAndExpand()
+
+    expect(await screen.findByText('Documentos por validar')).toBeInTheDocument()
+    expect(screen.queryByText('Tipo')).not.toBeInTheDocument()
+    expect(screen.queryByText('ine.pdf')).not.toBeInTheDocument()
   })
 })

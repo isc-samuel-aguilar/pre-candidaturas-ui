@@ -173,7 +173,7 @@ export function FolioForm({
       setFolioData({
         folio: dummyDataToFill.folio,
         email: dummyDataToFill.email,
-        telefono: '',
+        telefono: dummyDataToFill.user.phone,
         calle: dummyDataToFill.calle,
         numero: dummyDataToFill.numero,
         colonia: dummyDataToFill.colonia,
