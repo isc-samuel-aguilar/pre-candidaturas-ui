@@ -906,7 +906,7 @@ describe('generateDemarcationDocument', () => {
     return { fetchMock, anchors }
   }
 
-  it('calls the generated endpoint with the FUR documento key and bearer token', async () => {
+  it('calls the generated-v2 endpoint with the FUR documento key and bearer token', async () => {
     const { fetchMock } = stubPdfFetch('attachment; filename="FORMATO UNICO DE REGISTRO (FUR) APP.pdf"')
 
     await generateDemarcationDocument(
@@ -918,7 +918,7 @@ describe('generateDemarcationDocument', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(
-        /\/folios\/5\/demarcaciones\/10\/documents\/generated\?documento=FORMATO_UNICO_DE_REGISTRO_FUR_APP$/
+        /\/folios\/5\/demarcaciones\/10\/documents\/generated-v2\?documento=FORMATO_UNICO_DE_REGISTRO_FUR_APP$/
       ),
       expect.objectContaining({
         headers: { Authorization: 'Bearer token123' },

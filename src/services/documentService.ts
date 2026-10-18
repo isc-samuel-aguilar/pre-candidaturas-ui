@@ -387,7 +387,7 @@ export async function generateDemarcationDocument(
   const apiUrl = import.meta.env.VITE_API_URL
 
   const response = await fetch(
-    `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/generated?documento=${encodeURIComponent(documento)}`,
+    `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/generated-v2?documento=${encodeURIComponent(documento)}`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
 
