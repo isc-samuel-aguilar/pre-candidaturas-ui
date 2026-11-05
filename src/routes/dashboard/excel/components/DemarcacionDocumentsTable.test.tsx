@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   deleteDemarcationDocument: vi.fn(),
   downloadDemarcationDocumentFile: vi.fn(),
   generateDemarcationDocument: vi.fn(),
+  downloadGeneratedDemarcationDocument: vi.fn(),
 }))
 
 vi.mock('../../../../contexts/AuthContext', () => ({
@@ -32,6 +33,7 @@ vi.mock('../../../../services/documentService', () => ({
   deleteDemarcationDocument: mocks.deleteDemarcationDocument,
   downloadDemarcationDocumentFile: mocks.downloadDemarcationDocumentFile,
   generateDemarcationDocument: mocks.generateDemarcationDocument,
+  downloadGeneratedDemarcationDocument: mocks.downloadGeneratedDemarcationDocument,
   toDocumentoKey: (value: string) =>
     value
       .replace(/\.pdf$/i, '')
@@ -39,6 +41,7 @@ vi.mock('../../../../services/documentService', () => ({
       .replace(/ /g, '_'),
 }))
 
+// C13: 3 filas sembradas por el backend (FUR -> Proyecto -> ACUSE)
 const catalogTypes: KeyValueCatalog[] = [
   {
     id: 20,
@@ -51,9 +54,17 @@ const catalogTypes: KeyValueCatalog[] = [
   {
     id: 21,
     key: 'DOCUMENT_TYPE_DEMARCATION',
-    value: 'OTRO DOC DEMARCACION.pdf',
+    value: 'PROYECTO DE TRABAJO',
     type: 'String',
-    description: 'OTRO DOC DEMARCACION',
+    description: 'PROYECTO DE TRABAJO',
+    createdDate: '2026-01-01T00:00:00',
+  },
+  {
+    id: 22,
+    key: 'DOCUMENT_TYPE_DEMARCATION',
+    value: 'ACUSE_DE_DOCUMENTOS.pdf',
+    type: 'String',
+    description: 'ACUSE_DE_DOCUMENTOS',
     createdDate: '2026-01-01T00:00:00',
   },
 ]
@@ -73,18 +84,18 @@ const furDocument: DemarcationDocument = {
   createdDate: '2026-01-01T00:00:00',
 }
 
-const otroDocDocument: DemarcationDocument = {
+const proyDocument: DemarcationDocument = {
   id: 31,
   folioDemarcacionId: 10,
   keyValueCatalogId: 21,
   keyValueCatalogKey: 'DOCUMENT_TYPE_DEMARCATION',
-  keyValueCatalogValue: 'OTRO DOC DEMARCACION.pdf',
-  keyValueCatalogDescription: 'OTRO DOC DEMARCACION',
+  keyValueCatalogValue: 'PROYECTO DE TRABAJO',
+  keyValueCatalogDescription: 'PROYECTO DE TRABAJO',
   status: StatusEnum.POR_VALIDAR,
   statusDescription: 'revisar',
   bucketName: 'bucket',
-  objectKey: 'folio-5/demarcacion-10/demarcacion-21-otro.pdf',
-  originalFilename: 'otro-doc.pdf',
+  objectKey: 'folio-5/demarcacion-10/demarcacion-21-proy.docx',
+  originalFilename: 'proyecto.docx',
   createdDate: '2026-01-01T00:00:00',
 }
 
@@ -93,6 +104,7 @@ interface RenderOptions {
   mode?: 'upload' | 'validate'
   demarcacionStatus?: DemarcacionStatus
   existingDocs?: DemarcationDocument[]
+  documentTypes?: KeyValueCatalog[]
 }
 
 function renderTable({
@@ -100,12 +112,13 @@ function renderTable({
   mode = 'upload',
   demarcacionStatus = StatusEnum.VALIDO,
   existingDocs = [],
+  documentTypes = catalogTypes,
 }: RenderOptions = {}) {
   mocks.useAuth.mockReturnValue({
     token: 'token123',
     user: { role, userId: 1, username: role.toLowerCase() },
   })
-  mocks.getDemarcationDocumentTypes.mockResolvedValue(catalogTypes)
+  mocks.getDemarcationDocumentTypes.mockResolvedValue(documentTypes)
   mocks.getDemarcationDocuments.mockResolvedValue(existingDocs)
   mocks.uploadDemarcationDocument.mockResolvedValue(furDocument)
   mocks.updateDemarcationDocumentStatus.mockResolvedValue(furDocument)
@@ -129,15 +142,20 @@ describe('DemarcacionDocumentsTable - fusión catálogo + documentos reales', ()
   })
 
   it('renders one row per catalog type with merged documents', async () => {
-    renderTable({ existingDocs: [furDocument, otroDocDocument] })
+    renderTable({ existingDocs: [furDocument, proyDocument] })
 
     const table = await screen.findByTestId('demarcacion-documents-table')
-    // header + 2 catalog rows
-    expect(within(table).getAllByRole('row')).toHaveLength(3)
+    // header + 3 catalog rows
+    expect(within(table).getAllByRole('row')).toHaveLength(4)
     expect(within(table).getByText('FORMATO UNICO DE REGISTRO (FUR) APP.pdf')).toBeInTheDocument()
-    expect(within(table).getByText('OTRO DOC DEMARCACION.pdf')).toBeInTheDocument()
+    expect(within(table).getByText('PROYECTO DE TRABAJO')).toBeInTheDocument()
+    // Tipo es link con el nombre del catálogo; Generar muestra botón "Descargar"
+    expect(
+      within(table).getAllByText('ACUSE_DE_DOCUMENTOS.pdf')
+    ).toHaveLength(1)
+    expect(within(table).getByRole('button', { name: 'Descargar' })).toBeInTheDocument()
     expect(within(table).getByRole('button', { name: 'fur-app.pdf' })).toBeInTheDocument()
-    expect(within(table).getByRole('button', { name: 'otro-doc.pdf' })).toBeInTheDocument()
+    expect(within(table).getByRole('button', { name: 'proyecto.docx' })).toBeInTheDocument()
   })
 
   it('shows "Sin Cargar" only when there is no persisted document', async () => {
@@ -148,7 +166,7 @@ describe('DemarcacionDocumentsTable - fusión catálogo + documentos reales', ()
   })
 
   it('shows the real status chip for persisted documents', async () => {
-    renderTable({ existingDocs: [furDocument, otroDocDocument] })
+    renderTable({ existingDocs: [furDocument, proyDocument] })
 
     const table = await screen.findByTestId('demarcacion-documents-table')
     expect(within(table).getByText('Válido')).toBeInTheDocument()
@@ -413,7 +431,7 @@ describe('DemarcacionDocumentsTable - generación y descarga', () => {
     renderTable({ role: 'ADMIN', existingDocs: [] })
 
     const table = await screen.findByTestId('demarcacion-documents-table')
-    const plainTipo = within(table).getByText('OTRO DOC DEMARCACION.pdf')
+    const plainTipo = within(table).getByText('PROYECTO DE TRABAJO')
     expect(plainTipo.closest('button')).toBeNull()
 
     fireEvent.click(plainTipo)
@@ -438,7 +456,7 @@ describe('DemarcacionDocumentsTable - generación y descarga', () => {
   })
 
   it('deletes a persisted document', async () => {
-    renderTable({ role: 'ADMIN', existingDocs: [furDocument, otroDocDocument] })
+    renderTable({ role: 'ADMIN', existingDocs: [furDocument, proyDocument] })
 
     const table = await screen.findByTestId('demarcacion-documents-table')
     const [deleteButton] = within(table).getAllByRole('button', { name: 'Eliminar' })
@@ -448,5 +466,151 @@ describe('DemarcacionDocumentsTable - generación y descarga', () => {
     await waitFor(() => {
       expect(mocks.deleteDemarcationDocument).toHaveBeenCalledWith(5, 10, 30)
     })
+  })
+})
+
+describe('DemarcacionDocumentsTable - C13: filas PROYECTO DE TRABAJO y ACUSE', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('work project row has no generate button and accepts office files', async () => {
+    renderTable({ role: 'ADMIN', existingDocs: [] })
+
+    const table = await screen.findByTestId('demarcacion-documents-table')
+
+    // Generar solo en la fila FUR (PROY y ACUSE no generan)
+    const generateButtons = within(table).getAllByRole('button', { name: 'Generar' })
+    expect(generateButtons).toHaveLength(1)
+
+    // 2 inputs de archivo (FUR + PROY); el ACUSE no ofrece upload
+    const inputs = Array.from(table.querySelectorAll('input[type="file"]'))
+    expect(inputs).toHaveLength(2)
+    expect(inputs[0]).toHaveAttribute('accept', '.pdf,.jpg,.jpeg,.png,.gif,.webp')
+    expect(inputs[1]).toHaveAttribute(
+      'accept',
+      '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.jpg,.jpeg,.png'
+    )
+
+    // el input de PROY acepta un .docx
+    const officeFile = new File(['content'], 'documento.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    fireEvent.change(inputs[1]!, { target: { files: [officeFile] } })
+
+    await waitFor(() => {
+      expect(mocks.uploadDemarcationDocument).toHaveBeenCalledWith(
+        5,
+        10,
+        'PROYECTO DE TRABAJO',
+        expect.any(File),
+        'DOCUMENT_TYPE_DEMARCATION'
+      )
+    })
+  })
+
+  it('acuse row only offers download', async () => {
+    renderTable({ role: 'ADMIN', existingDocs: [] })
+
+    const table = await screen.findByTestId('demarcacion-documents-table')
+    const rows = within(table).getAllByRole('row')
+    const acuseRow = rows.find(
+      (row) => within(row).queryAllByText('ACUSE_DE_DOCUMENTOS.pdf').length > 0
+    )
+    if (!acuseRow) throw new Error('Acuse row not found')
+
+    // sin Subir/Eliminar/Validar y sin chip "Sin Cargar"
+    expect(within(acuseRow).queryByRole('button', { name: 'Subir' })).toBeNull()
+    expect(within(acuseRow).queryByRole('button', { name: 'Eliminar' })).toBeNull()
+    expect(within(acuseRow).queryByText('Sin Cargar')).toBeNull()
+
+    // Tipo es link de descarga con el nombre del catálogo
+    const tipoLink = within(acuseRow).getByRole('button', {
+      name: 'ACUSE_DE_DOCUMENTOS.pdf',
+    })
+
+    // Generar es botón outlined "Descargar" (mismo formato que el FUR)
+    const downloadButton = within(acuseRow).getByRole('button', { name: 'Descargar' })
+    expect(downloadButton.className).toContain('MuiButton-outlined')
+    expect(
+      within(acuseRow).getAllByRole('button', { name: 'ACUSE_DE_DOCUMENTOS.pdf' })
+    ).toHaveLength(1)
+
+    fireEvent.click(downloadButton)
+
+    await waitFor(() => {
+      expect(mocks.downloadGeneratedDemarcationDocument).toHaveBeenCalledWith(
+        5,
+        10,
+        'ACUSE_DE_DOCUMENTOS',
+        'token123'
+      )
+    })
+    expect(mocks.generateDemarcationDocument).not.toHaveBeenCalled()
+    expect(mocks.downloadDemarcationDocumentFile).not.toHaveBeenCalled()
+
+    fireEvent.click(tipoLink)
+
+    await waitFor(() => {
+      expect(mocks.downloadGeneratedDemarcationDocument).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('acuse download is available regardless of demarcation status', async () => {
+    renderTable({
+      role: 'ADMIN',
+      demarcacionStatus: StatusEnum.POR_VALIDAR,
+      existingDocs: [],
+    })
+
+    const table = await screen.findByTestId('demarcacion-documents-table')
+    const rows = within(table).getAllByRole('row')
+    const acuseRow = rows.find(
+      (row) => within(row).queryAllByText('ACUSE_DE_DOCUMENTOS.pdf').length > 0
+    )
+    if (!acuseRow) throw new Error('Acuse row not found')
+
+    const tipoLink = within(acuseRow).getByRole('button', {
+      name: 'ACUSE_DE_DOCUMENTOS.pdf',
+    })
+    expect(tipoLink).toBeEnabled()
+
+    const downloadButton = within(acuseRow).getByRole('button', { name: 'Descargar' })
+    expect(downloadButton).toBeEnabled()
+
+    // la demarcación no válida sí oculta Generar del FUR
+    expect(within(table).queryByRole('button', { name: 'Generar' })).toBeNull()
+
+    fireEvent.click(downloadButton)
+
+    await waitFor(() => {
+      expect(mocks.downloadGeneratedDemarcationDocument).toHaveBeenCalledWith(
+        5,
+        10,
+        'ACUSE_DE_DOCUMENTOS',
+        'token123'
+      )
+    })
+  })
+
+  it('renders rows in FUR, work project, acuse order regardless of catalog order', async () => {
+    renderTable({
+      role: 'ADMIN',
+      existingDocs: [],
+      documentTypes: [catalogTypes[0]!, catalogTypes[2]!, catalogTypes[1]!],
+    })
+
+    const table = await screen.findByTestId('demarcacion-documents-table')
+    const types = within(table)
+      .getAllByRole('row')
+      .slice(1)
+      .map(
+        (row) =>
+          within(row).getAllByRole('cell')[0]?.textContent?.trim() ?? ''
+      )
+
+    expect(types[0]).toContain('FORMATO UNICO DE REGISTRO (FUR) APP.pdf')
+    expect(types[1]).toContain('PROYECTO DE TRABAJO')
+    expect(types[2]).toContain('ACUSE_DE_DOCUMENTOS.pdf')
   })
 })

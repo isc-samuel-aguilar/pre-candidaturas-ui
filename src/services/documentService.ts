@@ -405,3 +405,31 @@ export async function generateDemarcationDocument(
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
+
+export async function downloadGeneratedDemarcationDocument(
+  folioId: number,
+  fdmId: number,
+  documento: string,
+  token: string
+): Promise<void> {
+  const apiUrl = import.meta.env.VITE_API_URL
+
+  const response = await fetch(
+    `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/generated?documento=${encodeURIComponent(documento)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+
+  if (!response.ok) {
+    await mapDemarcationFetchError(response)
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = getGeneratedFilename(response, `${documento}.pdf`)
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}

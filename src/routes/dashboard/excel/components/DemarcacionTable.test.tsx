@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   deleteDemarcationDocument: vi.fn(),
   downloadDemarcationDocumentFile: vi.fn(),
   generateDemarcationDocument: vi.fn(),
+  downloadGeneratedDemarcationDocument: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -57,6 +58,7 @@ vi.mock('../../../../services/documentService', () => ({
   deleteDemarcationDocument: mocks.deleteDemarcationDocument,
   downloadDemarcationDocumentFile: mocks.downloadDemarcationDocumentFile,
   generateDemarcationDocument: mocks.generateDemarcationDocument,
+  downloadGeneratedDemarcationDocument: mocks.downloadGeneratedDemarcationDocument,
   toDocumentoKey: (value: string) =>
     value
       .replace(/\.pdf$/i, '')
@@ -325,17 +327,25 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     expect(screen.getByRole('columnheader', { name: 'Validar' })).toBeInTheDocument()
   })
 
-  it('shows a sub-table with Pre Candidatos and FUR rows when expanding a demarcation', () => {
+  it('shows a sub-table with the documents branch first and Pre Candidatos second', () => {
     renderTable([registeredRow])
 
     expandFirstRow()
 
     expect(
-      screen.getByLabelText('Expandir Pre Candidatos')
+      screen.getByLabelText('Expandir Documentos por demarcación')
     ).toBeInTheDocument()
     expect(
-      screen.getByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP')
+      screen.getByLabelText('Expandir Pre Candidatos')
     ).toBeInTheDocument()
+    // C13: la rama de documentos va primero en el DOM
+    const branchLabels = screen
+      .getAllByLabelText(/^Expandir (Documentos por demarcación|Pre Candidatos)$/)
+      .map((el) => el.getAttribute('aria-label'))
+    expect(branchLabels).toEqual([
+      'Expandir Documentos por demarcación',
+      'Expandir Pre Candidatos',
+    ])
     expect(screen.queryByTestId('precandidatos-table')).not.toBeInTheDocument()
     expect(screen.queryByTestId('demarcacion-documents-table')).not.toBeInTheDocument()
   })
@@ -372,7 +382,7 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     renderTable([registeredRow])
 
     expandFirstRow()
-    fireEvent.click(screen.getByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP'))
+    fireEvent.click(screen.getByLabelText('Expandir Documentos por demarcación'))
 
     const documentsTable = await screen.findByTestId('demarcacion-documents-table')
 
@@ -390,7 +400,7 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     renderTable([registeredRow])
 
     expandFirstRow()
-    fireEvent.click(screen.getByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP'))
+    fireEvent.click(screen.getByLabelText('Expandir Documentos por demarcación'))
 
     const documentsTable = await screen.findByTestId('demarcacion-documents-table')
     const uploadButtons = within(documentsTable).getAllByRole('button', { name: 'Subir' })
@@ -413,7 +423,7 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     renderTable([registeredRow])
 
     expandFirstRow()
-    fireEvent.click(screen.getByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP'))
+    fireEvent.click(screen.getByLabelText('Expandir Documentos por demarcación'))
 
     const documentsTable = await screen.findByTestId('demarcacion-documents-table')
     const headers = within(documentsTable)
@@ -427,7 +437,7 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     renderTable([registeredRow], 'validate')
 
     expandFirstRow()
-    fireEvent.click(screen.getByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP'))
+    fireEvent.click(screen.getByLabelText('Expandir Documentos por demarcación'))
 
     const documentsTable = await screen.findByTestId('demarcacion-documents-table')
     const headers = within(documentsTable)
@@ -465,7 +475,7 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     expect(expandButton).toBeDisabled()
 
     expect(
-      screen.queryByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP')
+      screen.queryByLabelText('Expandir Documentos por demarcación')
     ).not.toBeInTheDocument()
     expect(screen.queryByTestId('demarcacion-documents-table')).not.toBeInTheDocument()
   })
@@ -474,13 +484,13 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     renderTable([registeredRow])
 
     expandFirstRow()
-    fireEvent.click(screen.getByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP'))
+    fireEvent.click(screen.getByLabelText('Expandir Documentos por demarcación'))
     await screen.findByTestId('demarcacion-documents-table')
 
     expandFirstRow()
 
     expect(
-      screen.queryByLabelText('Expandir FORMATO UNICO DE REGISTRO (FUR) APP')
+      screen.queryByLabelText('Expandir Documentos por demarcación')
     ).not.toBeInTheDocument()
     expect(screen.queryByTestId('demarcacion-documents-table')).not.toBeInTheDocument()
   })

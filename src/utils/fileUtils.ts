@@ -1,8 +1,18 @@
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 const PDF_TYPE = 'application/pdf'
+const OFFICE_TYPES = [
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+]
+const OFFICE_EXTENSIONS = /\.(doc|docx|xls|xlsx|ppt|pptx)$/i
 
 const MAX_IMAGE_SIZE = 1 * 1024 * 1024
 const MAX_PDF_SIZE = 2 * 1024 * 1024
+const MAX_OFFICE_SIZE = 5 * 1024 * 1024
 const MAX_IMAGE_DIMENSION = 1920
 
 export function isImageFile(file: File): boolean {
@@ -13,7 +23,29 @@ export function isPdfFile(file: File): boolean {
   return file.type === PDF_TYPE
 }
 
-export function validateFile(file: File): { valid: boolean; error?: string } {
+export function isOfficeFile(file: File): boolean {
+  return OFFICE_TYPES.includes(file.type) || OFFICE_EXTENSIONS.test(file.name)
+}
+
+export interface ValidateFileOptions {
+  allowOffice?: boolean
+}
+
+export function validateFile(
+  file: File,
+  options: ValidateFileOptions = {}
+): { valid: boolean; error?: string } {
+  if (options.allowOffice && isOfficeFile(file)) {
+    if (file.size > MAX_OFFICE_SIZE) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
+      return {
+        valid: false,
+        error: `El archivo ofimático pesa ${sizeMB} MB. El máximo permitido es 5 MB`,
+      }
+    }
+    return { valid: true }
+  }
+
   if (!isImageFile(file) && !isPdfFile(file)) {
     return {
       valid: false,

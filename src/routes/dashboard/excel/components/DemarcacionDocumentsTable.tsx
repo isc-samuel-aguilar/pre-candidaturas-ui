@@ -21,6 +21,7 @@ import {
   DEMARCATION_DOCUMENT_KEY,
   deleteDemarcationDocument,
   downloadDemarcationDocumentFile,
+  downloadGeneratedDemarcationDocument,
   generateDemarcationDocument,
   getDemarcationDocumentTypes,
   getDemarcationDocuments,
@@ -41,6 +42,13 @@ import { compressImage, isImageFile, validateFile } from '../../../../utils/file
 const EMPTY_STATUS_STYLE = { bg: '#E0E0E0', color: '#757575' }
 
 export const FUR_DOCUMENT_KEY = 'FORMATO_UNICO_DE_REGISTRO_FUR_APP'
+export const WORK_PROJECT_DOCUMENT_KEY = 'PROYECTO_DE_TRABAJO'
+export const ACUSE_DOCUMENT_KEY = 'ACUSE_DE_DOCUMENTOS'
+
+const DEFAULT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.gif,.webp'
+const WORK_PROJECT_ACCEPT = '.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.jpg,.jpeg,.png'
+
+const DOCUMENT_ROW_ORDER = [FUR_DOCUMENT_KEY, WORK_PROJECT_DOCUMENT_KEY, ACUSE_DOCUMENT_KEY]
 
 interface DocumentRow {
   catalogType: string
@@ -90,14 +98,28 @@ function mergeDocs(
   documentTypes: KeyValueCatalog[],
   existingDocs: DemarcationDocument[]
 ): DocumentRow[] {
-  return documentTypes.map((type) => {
+  const orderIndex = new Map(DOCUMENT_ROW_ORDER.map((key, index) => [key, index]))
+  const rows = documentTypes.map((type) => {
     const found = existingDocs.find((d) => d.keyValueCatalogValue === type.value)
     return { catalogType: type.value, document: found || null }
+  })
+  return rows.sort((a, b) => {
+    const ia = orderIndex.get(toDocumentoKey(a.catalogType)) ?? DOCUMENT_ROW_ORDER.length
+    const ib = orderIndex.get(toDocumentoKey(b.catalogType)) ?? DOCUMENT_ROW_ORDER.length
+    return ia - ib
   })
 }
 
 function isFurRow(catalogType: string): boolean {
   return toDocumentoKey(catalogType) === FUR_DOCUMENT_KEY
+}
+
+function isWorkProjectRow(catalogType: string): boolean {
+  return toDocumentoKey(catalogType) === WORK_PROJECT_DOCUMENT_KEY
+}
+
+function isAcuseRow(catalogType: string): boolean {
+  return toDocumentoKey(catalogType) === ACUSE_DOCUMENT_KEY
 }
 
 function getInitialDocStatus(doc: DemarcationDocument | null): StatusEnum | '' {
@@ -220,7 +242,7 @@ export function DemarcacionDocumentsTable({
 
     setUploadError(null)
 
-    const validation = validateFile(file)
+    const validation = validateFile(file, { allowOffice: isWorkProjectRow(catalogType) })
     if (!validation.valid) {
       setUploadError(validation.error || 'Archivo no válido')
       return
@@ -328,6 +350,32 @@ export function DemarcacionDocumentsTable({
     }
   }
 
+  const handleDownloadAcuse = async () => {
+    if (!token) return
+
+    setDownloadingTypes((prev) => new Set(prev).add(ACUSE_DOCUMENT_KEY))
+    try {
+      await downloadGeneratedDemarcationDocument(
+        folioId,
+        folioDemarcacionId,
+        ACUSE_DOCUMENT_KEY,
+        token
+      )
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: (err as { message?: string }).message || 'Error al descargar el documento',
+        severity: 'error',
+      })
+    } finally {
+      setDownloadingTypes((prev) => {
+        const next = new Set(prev)
+        next.delete(ACUSE_DOCUMENT_KEY)
+        return next
+      })
+    }
+  }
+
   const handleSaveDocStatus = async (catalogType: string, doc: DemarcationDocument | null) => {
     if (!doc) return
     const edit = getDocEdit(catalogType, doc)
@@ -427,12 +475,17 @@ export function DemarcacionDocumentsTable({
             const hasFile = doc !== null
             const edit = getDocEdit(row.catalogType, doc)
             const isUploading = uploadingTypes.has(row.catalogType)
-            const isDownloading = downloadingTypes.has(row.catalogType)
+            const isDownloading =
+              downloadingTypes.has(row.catalogType) ||
+              (isAcuseRow(row.catalogType) && downloadingTypes.has(ACUSE_DOCUMENT_KEY))
             const isGenerating = generatingTypes.has(row.catalogType)
             const showGenerar = isFurRow(row.catalogType)
+            const isAcuse = isAcuseRow(row.catalogType)
 
-            let tipoAction: 'download' | 'generate' | null = null
-            if (!(showGenerar && !allowGenerate)) {
+            let tipoAction: 'download' | 'generate' | 'acuse' | null = null
+            if (isAcuse) {
+              tipoAction = 'acuse'
+            } else if (!(showGenerar && !allowGenerate)) {
               if (hasFile && doc) {
                 tipoAction = 'download'
               } else if (showGenerar) {
@@ -443,7 +496,25 @@ export function DemarcacionDocumentsTable({
             return (
               <TableRow key={row.catalogType} hover>
                 <TableCell>
-                  {tipoAction === 'download' && doc ? (
+                  {tipoAction === 'acuse' ? (
+                    <Button
+                      variant="text"
+                      size="small"
+                      onClick={handleDownloadAcuse}
+                      disabled={isDownloading}
+                      startIcon={
+                        isDownloading ? <CircularProgress size={14} /> : undefined
+                      }
+                      sx={{
+                        textTransform: 'none',
+                        color: 'primary.main',
+                        fontWeight: 500,
+                        justifyContent: 'flex-start',
+                      }}
+                    >
+                      {row.catalogType}
+                    </Button>
+                  ) : tipoAction === 'download' && doc ? (
                     <Button
                       variant="text"
                       size="small"
@@ -486,7 +557,11 @@ export function DemarcacionDocumentsTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  {hasFile && doc ? (
+                  {isAcuse ? (
+                    <Typography variant="body2" color="text.secondary">
+                      -
+                    </Typography>
+                  ) : hasFile && doc ? (
                     <Button
                       variant="text"
                       size="small"
@@ -511,46 +586,64 @@ export function DemarcacionDocumentsTable({
                 </TableCell>
                 {!isValidateMode && (
                   <TableCell align="center">
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
-                      style={{ display: 'none' }}
-                      ref={(el) => {
-                        if (el) fileInputRefs.current.set(row.catalogType, el)
-                      }}
-                      onChange={(e) =>
-                        handleFileSelect(row.catalogType, e.target.files?.[0] || null)
-                      }
-                    />
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      startIcon={isUploading ? <CircularProgress size={14} /> : <CloudUploadIcon />}
-                      onClick={() => fileInputRefs.current.get(row.catalogType)?.click()}
-                      disabled={!allowSubir || isUploading || hasFile}
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Subir
-                    </Button>
+                    {isAcuse ? (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    ) : (
+                      <>
+                        <input
+                          type="file"
+                          accept={isWorkProjectRow(row.catalogType) ? WORK_PROJECT_ACCEPT : DEFAULT_ACCEPT}
+                          style={{ display: 'none' }}
+                          ref={(el) => {
+                            if (el) fileInputRefs.current.set(row.catalogType, el)
+                          }}
+                          onChange={(e) =>
+                            handleFileSelect(row.catalogType, e.target.files?.[0] || null)
+                          }
+                        />
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={isUploading ? <CircularProgress size={14} /> : <CloudUploadIcon />}
+                          onClick={() => fileInputRefs.current.get(row.catalogType)?.click()}
+                          disabled={!allowSubir || isUploading || hasFile}
+                          sx={{ textTransform: 'none' }}
+                        >
+                          Subir
+                        </Button>
+                      </>
+                    )}
                   </TableCell>
                 )}
                 {!isValidateMode && (
                   <TableCell align="center">
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      color="error"
-                      startIcon={<DeleteIcon />}
-                      disabled={!allowEliminar || !hasFile || !doc}
-                      onClick={() => doc && handleDeleteDoc(row.catalogType, doc.id)}
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Eliminar
-                    </Button>
+                    {isAcuse ? (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    ) : (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="error"
+                        startIcon={<DeleteIcon />}
+                        disabled={!allowEliminar || !hasFile || !doc}
+                        onClick={() => doc && handleDeleteDoc(row.catalogType, doc.id)}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        Eliminar
+                      </Button>
+                    )}
                   </TableCell>
                 )}
                 <TableCell align="center">
-                  {hasFile ? (
+                  {isAcuse ? (
+                    <Typography variant="body2" color="text.secondary">
+                      -
+                    </Typography>
+                  ) : hasFile ? (
                     <Chip
                       label={getStatusLabel(status)}
                       size="small"
@@ -578,7 +671,11 @@ export function DemarcacionDocumentsTable({
                 </TableCell>
                 {isValidateMode && (
                   <TableCell align="center">
-                    {hasFile && doc ? (
+                    {isAcuse || !(hasFile && doc) ? (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    ) : (
                       <TextField
                         select
                         size="small"
@@ -598,16 +695,16 @@ export function DemarcacionDocumentsTable({
                         <MenuItem value={StatusEnum.VALIDO}>Válido</MenuItem>
                         <MenuItem value={StatusEnum.ERROR}>Error</MenuItem>
                       </TextField>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        -
-                      </Typography>
                     )}
                   </TableCell>
                 )}
                 {isValidateMode && (
                   <TableCell>
-                    {hasFile && doc ? (
+                    {isAcuse || !(hasFile && doc) ? (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    ) : (
                       <TextField
                         size="small"
                         fullWidth
@@ -620,48 +717,63 @@ export function DemarcacionDocumentsTable({
                           patchDocEdit(row.catalogType, doc, { comment: e.target.value })
                         }
                       />
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        -
-                      </Typography>
                     )}
                   </TableCell>
                 )}
                 {isValidateMode && (
                   <TableCell align="center">
-                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                      <Button
-                        variant="contained"
-                        size="small"
-                        onClick={() => handleSaveDocStatus(row.catalogType, doc)}
-                        disabled={
-                          !hasFile ||
-                          !doc ||
-                          !allowValidar ||
-                          !edit.status ||
-                          !isDocEditDirty(row.catalogType, doc) ||
-                          edit.saving
-                        }
-                        sx={{ textTransform: 'none' }}
-                      >
-                        {edit.saving ? 'Guardando...' : 'Guardar'}
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        onClick={() => cancelDocEdit(row.catalogType)}
-                        disabled={
-                          !isDocEditDirty(row.catalogType, doc) || edit.saving
-                        }
-                        sx={{ textTransform: 'none' }}
-                      >
-                        Cancelar
-                      </Button>
-                    </Box>
+                    {isAcuse ? (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    ) : (
+                      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          onClick={() => handleSaveDocStatus(row.catalogType, doc)}
+                          disabled={
+                            !hasFile ||
+                            !doc ||
+                            !allowValidar ||
+                            !edit.status ||
+                            !isDocEditDirty(row.catalogType, doc) ||
+                            edit.saving
+                          }
+                          sx={{ textTransform: 'none' }}
+                        >
+                          {edit.saving ? 'Guardando...' : 'Guardar'}
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => cancelDocEdit(row.catalogType)}
+                          disabled={
+                            !isDocEditDirty(row.catalogType, doc) || edit.saving
+                          }
+                          sx={{ textTransform: 'none' }}
+                        >
+                          Cancelar
+                        </Button>
+                      </Box>
+                    )}
                   </TableCell>
                 )}
                 <TableCell align="center">
-                  {showGenerar && allowGenerate ? (
+                  {isAcuse ? (
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={handleDownloadAcuse}
+                      disabled={isDownloading}
+                      startIcon={
+                        isDownloading ? <CircularProgress size={14} /> : undefined
+                      }
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Descargar
+                    </Button>
+                  ) : showGenerar && allowGenerate ? (
                     <Button
                       variant="outlined"
                       size="small"

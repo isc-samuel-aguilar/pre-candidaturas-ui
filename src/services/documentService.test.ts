@@ -13,6 +13,7 @@ import {
   downloadDemarcationDocumentFile,
   generateDocumentForSign,
   generateDemarcationDocument,
+  downloadGeneratedDemarcationDocument,
   toDocumentoKey,
   updateDocumentStatus,
   updateDemarcationDocumentStatus,
@@ -998,6 +999,122 @@ describe('generateDemarcationDocument', () => {
 
     await expect(
       generateDemarcationDocument(5, 10, 'FORMATO_UNICO_DE_REGISTRO_FUR_APP', 'token123')
+    ).rejects.toEqual({
+      message: 'Acceso prohibido',
+      status: 403,
+      error: undefined,
+    })
+  })
+})
+
+describe('downloadGeneratedDemarcationDocument (C13 acuse)', () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  function stubGeneratedFetch(disposition: string | null) {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {
+        get: (name: string) => (name === 'Content-Disposition' ? disposition : null),
+      },
+      blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    ;(URL as { createObjectURL: (blob: Blob) => string }).createObjectURL = vi.fn(
+      () => 'blob:mock'
+    )
+    ;(URL as { revokeObjectURL: (url: string) => void }).revokeObjectURL = vi.fn()
+
+    const anchors: HTMLAnchorElement[] = []
+    const originalCreateElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+      const el = originalCreateElement(tagName)
+      if (tagName === 'a') anchors.push(el as HTMLAnchorElement)
+      return el
+    })
+
+    return { fetchMock, anchors }
+  }
+
+  it('calls the generated endpoint (not generated-v2) with the acuse key and bearer token', async () => {
+    const { fetchMock } = stubGeneratedFetch(
+      'attachment; filename="ACUSE_DE_DOCUMENTOS - PRIMERA.pdf"'
+    )
+
+    await downloadGeneratedDemarcationDocument(5, 10, 'ACUSE_DE_DOCUMENTOS', 'token123')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /\/folios\/5\/demarcaciones\/10\/documents\/generated\?documento=ACUSE_DE_DOCUMENTOS$/
+      ),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer token123' },
+      })
+    )
+    expect(fetchMock.mock.calls[0]?.[0]).not.toContain('generated-v2')
+  })
+
+  it('uses the filename from the Content-Disposition header', async () => {
+    const { anchors } = stubGeneratedFetch(
+      'attachment; filename="ACUSE_DE_DOCUMENTOS - PRIMERA.pdf"'
+    )
+
+    await downloadGeneratedDemarcationDocument(5, 10, 'ACUSE_DE_DOCUMENTOS', 'token123')
+
+    expect(anchors[0]?.download).toBe('ACUSE_DE_DOCUMENTOS - PRIMERA.pdf')
+  })
+
+  it('falls back to <documento>.pdf when Content-Disposition is missing', async () => {
+    const { anchors } = stubGeneratedFetch(null)
+
+    await downloadGeneratedDemarcationDocument(5, 10, 'ACUSE_DE_DOCUMENTOS', 'token123')
+
+    expect(anchors[0]?.download).toBe('ACUSE_DE_DOCUMENTOS.pdf')
+  })
+
+  it('maps DEMARCATION error codes to a spanish message', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      headers: {
+        get: (name: string) => (name === 'content-type' ? 'application/json' : null),
+      },
+      json: async () => ({ message: 'ignored', error: 'DOCUMENT_NOT_FOUND' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      downloadGeneratedDemarcationDocument(5, 10, 'ACUSE_DE_DOCUMENTOS', 'token123')
+    ).rejects.toEqual({
+      message: 'Documento no encontrado',
+      status: 400,
+      error: 'DOCUMENT_NOT_FOUND',
+    })
+  })
+
+  it('falls back to the API message for unknown error codes', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: {
+        get: (name: string) => (name === 'content-type' ? 'application/json' : null),
+      },
+      json: async () => ({ message: 'Acceso prohibido' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      downloadGeneratedDemarcationDocument(5, 10, 'ACUSE_DE_DOCUMENTOS', 'token123')
     ).rejects.toEqual({
       message: 'Acceso prohibido',
       status: 403,

@@ -535,6 +535,38 @@ export function DemarcacionTable({
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <IconButton
                                       size="small"
+                                      aria-label="Expandir Documentos por demarcación"
+                                      onClick={() => handleToggleBranch(row.catalogo.id, 'fur')}
+                                    >
+                                      {expandedBranches.get(row.catalogo.id) === 'fur' ? (
+                                        <KeyboardArrowDownIcon />
+                                      ) : (
+                                        <KeyboardArrowRightIcon />
+                                      )}
+                                    </IconButton>
+                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                      Documentos por demarcación
+                                    </Typography>
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                              {expandedBranches.get(row.catalogo.id) === 'fur' && (
+                                <TableRow>
+                                  <TableCell sx={{ pl: 6 }}>
+                                    <DemarcacionDocumentsTable
+                                      folioId={row.folioDemarcacion.folioId}
+                                      folioDemarcacionId={row.folioDemarcacion.id}
+                                      demarcacionStatus={row.status}
+                                      mode={mode}
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                              <TableRow hover>
+                                <TableCell>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <IconButton
+                                      size="small"
                                       aria-label="Expandir Pre Candidatos"
                                       onClick={() => handleToggleBranch(row.catalogo.id, 'pre')}
                                     >
@@ -561,38 +593,6 @@ export function DemarcacionTable({
                                       allowDocActions={!isValidateMode}
                                       allowDocValidation={isValidateMode}
                                       groupDocuments
-                                    />
-                                  </TableCell>
-                                </TableRow>
-                              )}
-                              <TableRow hover>
-                                <TableCell>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <IconButton
-                                      size="small"
-                                      aria-label="Expandir FORMATO UNICO DE REGISTRO (FUR) APP"
-                                      onClick={() => handleToggleBranch(row.catalogo.id, 'fur')}
-                                    >
-                                      {expandedBranches.get(row.catalogo.id) === 'fur' ? (
-                                        <KeyboardArrowDownIcon />
-                                      ) : (
-                                        <KeyboardArrowRightIcon />
-                                      )}
-                                    </IconButton>
-                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                      FORMATO UNICO DE REGISTRO (FUR) APP
-                                    </Typography>
-                                  </Box>
-                                </TableCell>
-                              </TableRow>
-                              {expandedBranches.get(row.catalogo.id) === 'fur' && (
-                                <TableRow>
-                                  <TableCell sx={{ pl: 6 }}>
-                                    <DemarcacionDocumentsTable
-                                      folioId={row.folioDemarcacion.folioId}
-                                      folioDemarcacionId={row.folioDemarcacion.id}
-                                      demarcacionStatus={row.status}
-                                      mode={mode}
                                     />
                                   </TableCell>
                                 </TableRow>
