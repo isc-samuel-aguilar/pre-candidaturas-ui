@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { CSSProperties, ReactNode } from 'react'
 import { DemarcacionTable } from './DemarcacionTable'
 import { StatusEnum } from '../../../../types/enums'
@@ -79,6 +79,7 @@ vi.mock('../../../../components/PrecandidatosTable', () => ({
     allowDocActions?: boolean
     allowDocValidation?: boolean
     groupDocuments?: boolean
+    showGenerateColumn?: boolean
   }) => (
     <div
       data-testid="precandidatos-table"
@@ -89,6 +90,7 @@ vi.mock('../../../../components/PrecandidatosTable', () => ({
       data-allow-doc-actions={String(props.allowDocActions ?? false)}
       data-allow-doc-validation={String(props.allowDocValidation ?? false)}
       data-group-documents={String(props.groupDocuments ?? false)}
+      data-show-generate-column={String(props.showGenerateColumn ?? false)}
     />
   ),
 }))
@@ -364,6 +366,8 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     expect(table).toHaveAttribute('data-allow-doc-actions', 'true')
     expect(table).toHaveAttribute('data-allow-doc-validation', 'false')
     expect(table).toHaveAttribute('data-group-documents', 'true')
+    // C14: la columna Generar solo aplica en el index (no en validación)
+    expect(table).toHaveAttribute('data-show-generate-column', 'true')
   })
 
   it('enables doc validation for PrecandidatosTable in validate mode', () => {
@@ -376,6 +380,8 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     expect(table).toHaveAttribute('data-allow-doc-actions', 'false')
     expect(table).toHaveAttribute('data-allow-doc-validation', 'true')
     expect(table).toHaveAttribute('data-group-documents', 'true')
+    // C14: sin columna Generar en modo validación
+    expect(table).toHaveAttribute('data-show-generate-column', 'false')
   })
 
   it('loads the catalog and passes the folio/demarcacion context to the FUR table (C12)', async () => {
@@ -538,5 +544,58 @@ describe('DemarcacionTable - auto-expansión por rol', () => {
 
     expect(screen.queryByTestId('precandidatos-table')).not.toBeInTheDocument()
     expect(screen.queryByTestId('demarcacion-documents-table')).not.toBeInTheDocument()
+  })
+})
+
+describe('DemarcacionTable - C14 (scroll al expandir)', () => {
+  let scrollIntoViewMock: ReturnType<typeof vi.fn>
+  let originalScrollIntoView: unknown
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.useNavigate.mockReturnValue(vi.fn())
+    mocks.useAuth.mockReturnValue({
+      token: 'token123',
+      user: { role: 'ADMIN', userId: 1, username: 'admin' },
+    })
+    mocks.getDemarcationDocumentTypes.mockResolvedValue(demarcationDocumentTypes)
+    mocks.getDemarcationDocuments.mockResolvedValue([])
+    // jsdom no implementa scrollIntoView → stub local de este describe
+    originalScrollIntoView = Element.prototype.scrollIntoView
+    scrollIntoViewMock = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoViewMock
+  })
+
+  afterEach(() => {
+    Element.prototype.scrollIntoView = originalScrollIntoView as typeof Element.prototype.scrollIntoView
+  })
+
+  it('calls scrollIntoView with smooth/start when expanding the demarcation', async () => {
+    renderTable([registeredRow])
+
+    expandFirstRow()
+
+    await waitFor(() =>
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    )
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call scrollIntoView when collapsing the demarcation', async () => {
+    renderTable([registeredRow])
+
+    expandFirstRow()
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalledTimes(1))
+    scrollIntoViewMock.mockClear()
+
+    // colapsar la misma demarcación
+    expandFirstRow()
+
+    // deja pasar un frame por si hubiera un rAF pendiente
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    expect(scrollIntoViewMock).not.toHaveBeenCalled()
   })
 })
