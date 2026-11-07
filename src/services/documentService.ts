@@ -24,6 +24,15 @@ function mapApiError(error: ApiError): DocumentError {
 export const GENERATED_DOCUMENT_KEY = 'GENERATED_DOCUMENT'
 export const DEMARCATION_DOCUMENT_KEY = 'DOCUMENT_TYPE_DEMARCATION'
 
+// Mapa de tipos de catalogo DOCUMENT_TYPE con plantilla PDF propia para generar.
+// Motivo: toDocumentoKey('CV PUB') = 'CV_PUB' pero la plantilla se llama 'CV_PUBLICO_APP'
+// (sin este mapa el endpoint responde TEMPLATE_NOT_FOUND). INE/ACTA/FOTO no tienen plantilla.
+export const GENERATABLE_DOCUMENT_TYPES: Record<string, string> = {
+  'CV PUB': 'CV_PUBLICO_APP',
+  'CV PRIV': 'CV_PRIVADO_APP',
+  'FORMATO DECL PATRI': 'FORMATO_DE_DECLARACION_APP',
+}
+
 const DOCUMENT_TYPE_CACHE_KEY = 'document_type_cache'
 const GENERATED_DOCUMENT_CACHE_KEY = 'generated_document_type_cache'
 const DEMARCATION_DOCUMENT_CACHE_KEY = 'demarcation_document_type_cache'

@@ -107,6 +107,8 @@ export function DemarcacionTable({
   )
   const [rowEdits, setRowEdits] = useState<Map<number, RowEditState>>(new Map())
   const fileInputRefs = useRef<Map<number, HTMLInputElement>>(new Map())
+  // Refs de la fila principal de cada demarcacion (para el scroll al expandir)
+  const rowRefs = useRef<Map<number, HTMLTableRowElement | null>>(new Map())
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -205,6 +207,18 @@ export function DemarcacionTable({
           return next
         })
       }
+
+      // Solo al abrir: scroll suave hasta la fila que se expandio (no al colapsar)
+      requestAnimationFrame(() => {
+        const el = rowRefs.current.get(catalogoId)
+        // guard defensivo: jsdom no implementa scrollIntoView (en el browser siempre existe)
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start',
+          })
+        }
+      })
     }
   }
 
@@ -344,7 +358,12 @@ export function DemarcacionTable({
 
               return (
                 <Fragment key={row.catalogo.id}>
-                  <TableRow hover>
+                  <TableRow
+                    hover
+                    ref={(el) => {
+                      rowRefs.current.set(row.catalogo.id, el)
+                    }}
+                  >
                     <TableCell padding="checkbox">
                       <IconButton
                         size="small"
@@ -593,6 +612,7 @@ export function DemarcacionTable({
                                       allowDocActions={!isValidateMode}
                                       allowDocValidation={isValidateMode}
                                       groupDocuments
+                                      showGenerateColumn={!isValidateMode}
                                     />
                                   </TableCell>
                                 </TableRow>

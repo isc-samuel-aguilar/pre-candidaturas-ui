@@ -40,6 +40,12 @@ vi.mock('../services/documentService', () => ({
   updateDocumentStatus: mocks.updateDocumentStatus,
   // mismo valor que documentService.GENERATED_DOCUMENT_KEY (constante en producción)
   GENERATED_DOCUMENT_KEY: 'GENERATED_DOCUMENT',
+  // mismo mapa que documentService.GENERATABLE_DOCUMENT_TYPES (C14)
+  GENERATABLE_DOCUMENT_TYPES: {
+    'CV PUB': 'CV_PUBLICO_APP',
+    'CV PRIV': 'CV_PRIVADO_APP',
+    'FORMATO DECL PATRI': 'FORMATO_DE_DECLARACION_APP',
+  } as Record<string, string>,
 }))
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -721,5 +727,199 @@ describe('PrecandidatosTable - auto-expansión "Documentos por validar" (REGISTE
     expect(await screen.findByText('Documentos por validar')).toBeInTheDocument()
     expect(screen.queryByText('Tipo')).not.toBeInTheDocument()
     expect(screen.queryByText('ine.pdf')).not.toBeInTheDocument()
+  })
+})
+
+describe('PrecandidatosTable - columna Generar (C14)', () => {
+  // Catálogo con tipos generables (con plantilla) y no generables (sin plantilla)
+  const catalogDocumentTypes = [
+    'CV PUB',
+    'CV PRIV',
+    'FORMATO DECL PATRI',
+    'INE',
+    'ACTA',
+    'FOTO',
+  ].map((value, index) => ({
+    id: index + 100,
+    key: 'DOCUMENT_TYPE',
+    value,
+    type: 'DOCUMENT_TYPE',
+    description: value,
+    createdDate: '2026-01-01T00:00:00',
+  }))
+
+  // Todos los tipos del catálogo con documento Válido (para desbloquear el grupo de firma)
+  const allValidDocs = catalogDocumentTypes.map((type, index) => ({
+    ...documentFixture,
+    id: 200 + index,
+    keyValueCatalogValue: type.value,
+    originalFilename: `${type.value}.pdf`,
+    status: StatusEnum.VALIDO,
+    statusDescription: null,
+  }))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'VALIDATOR' } })
+    mocks.getPrecandidatos.mockResolvedValue([precandidato])
+    mocks.getDocumentTypes.mockResolvedValue(catalogDocumentTypes)
+    mocks.getGeneratedDocumentTypes.mockResolvedValue(generatedDocumentTypes)
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([documentFixture])
+    mocks.updateDocumentStatus.mockResolvedValue({
+      ...documentFixture,
+      status: StatusEnum.VALIDO,
+      statusDescription: 'OK',
+    })
+  })
+
+  async function renderGroupedAndExpandPrecandidato(
+    props: Partial<ComponentProps<typeof PrecandidatosTable>> = {}
+  ) {
+    render(
+      <PrecandidatosTable
+        folioId={1}
+        demarcacionName="ASIENTOS"
+        demarcacionStatus={StatusEnum.VALIDO}
+        groupDocuments
+        {...props}
+      />
+    )
+
+    const [expandButton] = await screen.findAllByRole('button')
+    if (!expandButton) throw new Error('Expand button not found')
+    fireEvent.click(expandButton)
+
+    await waitFor(() => expect(mocks.getDocumentsByPrecandidato).toHaveBeenCalled())
+  }
+
+  // Abre el grupo "Documentos por validar" (los headers del grupo dependen del prop)
+  async function openValidateGroup(
+    props: Partial<ComponentProps<typeof PrecandidatosTable>> = {}
+  ) {
+    await renderGroupedAndExpandPrecandidato(props)
+    fireEvent.click(await screen.findByRole('button', { name: 'Expandir Documentos por validar' }))
+    await screen.findByRole('columnheader', { name: 'Tipo' })
+  }
+
+  // Abre el grupo "Documentos por firmar y validar" (requiere todos los docs VÁLIDOS)
+  async function openSignGroup(
+    props: Partial<ComponentProps<typeof PrecandidatosTable>> = {}
+  ) {
+    mocks.getDocumentsByPrecandidato.mockResolvedValue(allValidDocs)
+    await renderGroupedAndExpandPrecandidato({ allowDocValidation: true, ...props })
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Expandir Documentos por firmar y validar' })
+    )
+    await screen.findByRole('columnheader', { name: 'Descargar para firmar' })
+  }
+
+  function getGenerateButton(catalogType: string): HTMLElement {
+    const row = screen.getByText(catalogType).closest('tr')
+    if (!row) throw new Error(`Row for ${catalogType} not found`)
+    return within(row).getByRole('button', { name: 'Generar' })
+  }
+
+  it('shows the Generar header in the validate group when showGenerateColumn is true', async () => {
+    await openValidateGroup({ showGenerateColumn: true })
+
+    expect(screen.getByRole('columnheader', { name: 'Generar' })).toBeInTheDocument()
+  })
+
+  it('hides the Generar header in the validate group when showGenerateColumn is not set', async () => {
+    await openValidateGroup()
+
+    expect(screen.queryByRole('columnheader', { name: 'Generar' })).not.toBeInTheDocument()
+  })
+
+  it('never shows the Generar header or buttons in the sign group', async () => {
+    await openSignGroup({ showGenerateColumn: true })
+
+    expect(screen.queryByRole('columnheader', { name: 'Generar' })).not.toBeInTheDocument()
+    expect(screen.queryAllByRole('button', { name: 'Generar' })).toHaveLength(0)
+  })
+
+  it('renders the Generar button only on CV PUB, CV PRIV and FORMATO DECL PATRI rows', async () => {
+    await openValidateGroup({ showGenerateColumn: true })
+
+    expect(screen.getAllByRole('button', { name: 'Generar' })).toHaveLength(3)
+    for (const type of ['CV PUB', 'CV PRIV', 'FORMATO DECL PATRI']) {
+      expect(getGenerateButton(type)).toBeInTheDocument()
+    }
+
+    // INE/ACTA/FOTO no tienen plantilla → celda con "-"
+    for (const type of ['INE', 'ACTA', 'FOTO']) {
+      const row = screen.getByText(type).closest('tr')
+      if (!row) throw new Error(`Row for ${type} not found`)
+      const cells = within(row).getAllByRole('cell')
+      expect(cells[1]).toHaveTextContent('-')
+      expect(within(row).queryByRole('button', { name: 'Generar' })).not.toBeInTheDocument()
+    }
+  })
+
+  it('calls generateDocumentForSign with the mapped template key on each Generar click', async () => {
+    mocks.generateDocumentForSign.mockResolvedValue(undefined)
+
+    await openValidateGroup({ showGenerateColumn: true })
+
+    const expected: Array<[string, string]> = [
+      ['CV PUB', 'CV_PUBLICO_APP'],
+      ['CV PRIV', 'CV_PRIVADO_APP'],
+      ['FORMATO DECL PATRI', 'FORMATO_DE_DECLARACION_APP'],
+    ]
+
+    for (const [catalogType, templateKey] of expected) {
+      fireEvent.click(getGenerateButton(catalogType))
+      await waitFor(() => {
+        expect(mocks.generateDocumentForSign).toHaveBeenCalledWith(7, templateKey, 'token')
+      })
+    }
+  })
+
+  it('disables the pressed Generar button and shows a spinner while generating', async () => {
+    const deferred: { resolve?: () => void } = {}
+    mocks.generateDocumentForSign.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          deferred.resolve = resolve
+        })
+    )
+
+    await openValidateGroup({ showGenerateColumn: true })
+
+    expect(getGenerateButton('CV PUB')).toBeEnabled()
+
+    fireEvent.click(getGenerateButton('CV PUB'))
+
+    await waitFor(() => expect(getGenerateButton('CV PUB')).toBeDisabled())
+    const row = screen.getByText('CV PUB').closest('tr')
+    if (!row) throw new Error('Row for CV PUB not found')
+    expect(within(row).getByRole('progressbar')).toBeInTheDocument()
+    // solo la fila presionada queda deshabilitada
+    expect(getGenerateButton('CV PRIV')).toBeEnabled()
+    expect(getGenerateButton('FORMATO DECL PATRI')).toBeEnabled()
+
+    deferred.resolve?.()
+
+    await waitFor(() => expect(getGenerateButton('CV PUB')).toBeEnabled())
+    expect(await screen.findByText('Documento generado')).toBeInTheDocument()
+  })
+
+  it('keeps the expanded content as the only scroll container (sin scroll interno en la tabla)', async () => {
+    await openValidateGroup({ showGenerateColumn: true })
+
+    const container = document.querySelector('.MuiTableContainer-root') as HTMLElement | null
+    expect(container).not.toBeNull()
+    if (!container) throw new Error('TableContainer not found')
+    // sin scroll interno en la tabla: el TableContainer ya no define maxHeight
+    expect(container.style.maxHeight).toBe('')
+    expect(container).not.toHaveStyle({ maxHeight: '400px' })
+
+    // el texto vive dentro de la tabla anidada: el Box scroll es un ancestro
+    let scrollBox: Element | null = screen.getByText('Documentos por validar')
+    while (scrollBox && window.getComputedStyle(scrollBox).maxHeight !== '60vh') {
+      scrollBox = scrollBox.parentElement
+    }
+    expect(scrollBox).not.toBeNull()
+    expect(scrollBox).toHaveStyle({ maxHeight: '60vh', overflowY: 'auto' })
   })
 })

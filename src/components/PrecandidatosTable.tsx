@@ -34,6 +34,7 @@ import {
   toDocumentoKey,
   updateDocumentStatus,
   GENERATED_DOCUMENT_KEY,
+  GENERATABLE_DOCUMENT_TYPES,
   type UpdateDocumentStatusPayload,
 } from '../services/documentService'
 import { useAuth } from '../contexts/AuthContext'
@@ -62,6 +63,7 @@ interface PrecandidatosTableProps {
   allowDocActions?: boolean
   allowDocValidation?: boolean
   groupDocuments?: boolean
+  showGenerateColumn?: boolean
 }
 
 type DocRowKey = 'validate' | 'sign'
@@ -123,6 +125,7 @@ export function PrecandidatosTable({
   allowDocActions = true,
   allowDocValidation = false,
   groupDocuments = false,
+  showGenerateColumn = false,
 }: PrecandidatosTableProps) {
   const { token, user } = useAuth()
   const [precandidatos, setPrecandidatos] = useState<Precandidato[]>([])
@@ -485,6 +488,9 @@ export function PrecandidatosTable({
         <TableRow>
           <TableCell>Tipo</TableCell>
           {showSignColumn && <TableCell align="center">Descargar para firmar</TableCell>}
+          {showGenerateColumn && !showSignColumn && (
+            <TableCell align="center">Generar</TableCell>
+          )}
           <TableCell>Nombre</TableCell>
           {allowDocActions && <TableCell align="center">Subir</TableCell>}
           {allowDocActions && <TableCell align="center">Eliminar</TableCell>}
@@ -508,6 +514,11 @@ export function PrecandidatosTable({
           const hasFile = doc !== null
           const downloadKey = getDownloadKey(claveIfe, toDocumentoKey(row.catalogType))
           const isDownloading = downloadingDocs.has(downloadKey)
+          // Clave de catalogo con plantilla propia para generar (INE/ACTA/FOTO no tienen)
+          const generateDocKey = GENERATABLE_DOCUMENT_TYPES[row.catalogType]
+          const isGenerating =
+            generateDocKey !== undefined &&
+            downloadingDocs.has(getDownloadKey(claveIfe, generateDocKey))
 
           return (
             <TableRow key={row.catalogType} hover>
@@ -530,6 +541,28 @@ export function PrecandidatosTable({
                   >
                     Descargar y firmar
                   </Button>
+                </TableCell>
+              )}
+              {showGenerateColumn && !showSignColumn && (
+                <TableCell align="center">
+                  {generateDocKey !== undefined ? (
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() =>
+                        handleDownloadForSign(precandidatoId, claveIfe, generateDocKey)
+                      }
+                      disabled={isGenerating}
+                      startIcon={isGenerating ? <CircularProgress size={14} /> : undefined}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Generar
+                    </Button>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      -
+                    </Typography>
+                  )}
                 </TableCell>
               )}
               <TableCell>
@@ -834,8 +867,8 @@ export function PrecandidatosTable({
           {uploadError}
         </Alert>
       )}
-      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400 }}>
-        <Table size="small" stickyHeader>
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox" />
@@ -945,7 +978,9 @@ export function PrecandidatosTable({
                   {isExpanded && (
                     <TableRow key={`${precandidatoId}-expanded`}>
                       <TableCell colSpan={totalColumns} sx={{ p: 0, backgroundColor: '#f5f5f5' }}>
-                        <Box sx={{ py: 1, pl: 4, pr: 2 }}>
+                        {/* Sin scroll interno en la tabla: el contenido expandido crece
+                            hasta 60vh y ahi hace scroll (unico scroll) */}
+                        <Box sx={{ py: 1, pl: 4, pr: 2, maxHeight: '60vh', overflowY: 'auto' }}>
                           {isLoadingDocs ? (
                             <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
                               <CircularProgress size={20} />
