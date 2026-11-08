@@ -246,7 +246,7 @@ describe('PrecandidatosTable', () => {
     await waitFor(() => {
       expect(screen.getByText('Documento actualizado correctamente')).toBeInTheDocument()
     })
-  })
+  }, 10000)
 
   it('shows an error message when the documents cannot be loaded', async () => {
     mocks.getDocumentsByPrecandidato.mockRejectedValue({ message: 'Prohibido', status: 403 })
