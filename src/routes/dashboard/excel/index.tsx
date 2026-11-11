@@ -6,6 +6,7 @@ import { FolioSection } from './components/FolioSection'
 import { ExamplesSection } from './components/ExamplesSection'
 import { DemarcacionTable } from './components/DemarcacionTable'
 import type { DemarcacionRow } from '../../../types/demarcacion'
+import type { StatusEnum } from '../../../types/enums'
 import type { RouterContext } from '../../../main'
 
 export const Route = createFileRoute('/dashboard/excel/')({
@@ -29,6 +30,7 @@ function ExcelPage() {
     fetchData,
     handleUpload,
     handleDelete,
+    updateStatus,
     getStatusColor,
   } = useDemarcaciones()
 
@@ -90,6 +92,37 @@ function ExcelPage() {
     setSnackbar((prev) => ({ ...prev, open: false }))
   }, [])
 
+  // Sólo lo usa ADMIN (columnas Validar/Acciones de la vista de subida)
+  const handleSaveStatus = useCallback(
+    async (
+      demarcacion: DemarcacionRow,
+      status: StatusEnum,
+      statusDescription: string | null
+    ) => {
+      if (!demarcacion.folioDemarcacion) return
+
+      try {
+        await updateStatus(demarcacion.folioDemarcacion, status, statusDescription)
+        setSnackbar({
+          open: true,
+          message: `Demarcación ${
+            demarcacion.catalogo.alias || demarcacion.catalogo.demarcacion
+          } actualizada correctamente`,
+          severity: 'success',
+        })
+        await fetchData()
+      } catch (err) {
+        setSnackbar({
+          open: true,
+          message: (err as { message?: string }).message || 'Error al guardar los cambios',
+          severity: 'error',
+        })
+        throw err
+      }
+    },
+    [updateStatus, fetchData]
+  )
+
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
@@ -107,6 +140,7 @@ function ExcelPage() {
         onUpload={handleUploadWithFeedback}
         onDelete={handleDeleteWithFeedback}
         getStatusColor={getStatusColor}
+        onSaveStatus={handleSaveStatus}
       />
 
       <Snackbar

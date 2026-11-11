@@ -79,7 +79,6 @@ vi.mock('../../../../components/PrecandidatosTable', () => ({
     allowDocActions?: boolean
     allowDocValidation?: boolean
     groupDocuments?: boolean
-    showGenerateColumn?: boolean
   }) => (
     <div
       data-testid="precandidatos-table"
@@ -90,7 +89,6 @@ vi.mock('../../../../components/PrecandidatosTable', () => ({
       data-allow-doc-actions={String(props.allowDocActions ?? false)}
       data-allow-doc-validation={String(props.allowDocValidation ?? false)}
       data-group-documents={String(props.groupDocuments ?? false)}
-      data-show-generate-column={String(props.showGenerateColumn ?? false)}
     />
   ),
 }))
@@ -181,7 +179,15 @@ const demarcationDocumentTypes: KeyValueCatalog[] = [
   },
 ]
 
-function renderTable(rows: DemarcacionRow[], mode?: 'upload' | 'validate') {
+function renderTable(
+  rows: DemarcacionRow[],
+  mode?: 'upload' | 'validate',
+  onSaveStatus?: (
+    demarcacion: DemarcacionRow,
+    status: StatusEnum,
+    statusDescription: string | null
+  ) => Promise<void>
+) {
   render(
     <DemarcacionTable
       demarcaciones={rows}
@@ -191,6 +197,7 @@ function renderTable(rows: DemarcacionRow[], mode?: 'upload' | 'validate') {
       onDelete={async () => {}}
       getStatusColor={() => ({ bg: '#FFFFFF', color: '#000000' })}
       mode={mode}
+      onSaveStatus={onSaveStatus}
     />
   )
 }
@@ -322,7 +329,13 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     expect(screen.getByRole('button', { name: 'Subir' })).toBeInTheDocument()
   })
 
-  it('does not render the Excel column header in validate mode', () => {
+  it('VALIDATOR does not render the Excel column header in validate mode', () => {
+    // el rol por defecto del suite es ADMIN (que ahora sí ve Excel en validate);
+    // esta regresión aplica al VALIDATOR
+    mocks.useAuth.mockReturnValue({
+      token: 'token123',
+      user: { role: 'VALIDATOR', userId: 1, username: 'validator' },
+    })
     renderTable([registeredRow], 'validate')
 
     expect(screen.queryByRole('columnheader', { name: 'Excel' })).not.toBeInTheDocument()
@@ -366,8 +379,6 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     expect(table).toHaveAttribute('data-allow-doc-actions', 'true')
     expect(table).toHaveAttribute('data-allow-doc-validation', 'false')
     expect(table).toHaveAttribute('data-group-documents', 'true')
-    // C14: la columna Generar solo aplica en el index (no en validación)
-    expect(table).toHaveAttribute('data-show-generate-column', 'true')
   })
 
   it('enables doc validation for PrecandidatosTable in validate mode', () => {
@@ -380,8 +391,6 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     expect(table).toHaveAttribute('data-allow-doc-actions', 'false')
     expect(table).toHaveAttribute('data-allow-doc-validation', 'true')
     expect(table).toHaveAttribute('data-group-documents', 'true')
-    // C14: sin columna Generar en modo validación
-    expect(table).toHaveAttribute('data-show-generate-column', 'false')
   })
 
   it('loads the catalog and passes the folio/demarcacion context to the FUR table (C12)', async () => {
@@ -500,6 +509,34 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     ).not.toBeInTheDocument()
     expect(screen.queryByTestId('demarcacion-documents-table')).not.toBeInTheDocument()
   })
+
+  it('expands both branches independently (opening one does not collapse the other)', async () => {
+    renderTable([registeredRow])
+
+    expandFirstRow()
+    fireEvent.click(screen.getByLabelText('Expandir Documentos por demarcación'))
+    await screen.findByTestId('demarcacion-documents-table')
+
+    fireEvent.click(screen.getByLabelText('Expandir Pre Candidatos'))
+
+    expect(await screen.findByTestId('precandidatos-table')).toBeInTheDocument()
+    expect(screen.getByTestId('demarcacion-documents-table')).toBeInTheDocument()
+  })
+
+  it('collapsing one branch keeps the other branch expanded', async () => {
+    renderTable([registeredRow])
+
+    expandFirstRow()
+    fireEvent.click(screen.getByLabelText('Expandir Documentos por demarcación'))
+    await screen.findByTestId('demarcacion-documents-table')
+    fireEvent.click(screen.getByLabelText('Expandir Pre Candidatos'))
+    await screen.findByTestId('precandidatos-table')
+
+    fireEvent.click(screen.getByLabelText('Expandir Documentos por demarcación'))
+
+    expect(screen.queryByTestId('demarcacion-documents-table')).not.toBeInTheDocument()
+    expect(screen.getByTestId('precandidatos-table')).toBeInTheDocument()
+  })
 })
 
 describe('DemarcacionTable - auto-expansión por rol', () => {
@@ -597,5 +634,164 @@ describe('DemarcacionTable - C14 (scroll al expandir)', () => {
     // deja pasar un frame por si hubiera un rAF pendiente
     await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.getDemarcationDocumentTypes.mockResolvedValue(demarcationDocumentTypes)
+    mocks.getDemarcationDocuments.mockResolvedValue([])
+  })
+
+  function setRole(role: string) {
+    mocks.useAuth.mockReturnValue({
+      token: 'token123',
+      user: { role, userId: 1, username: 'user' },
+    })
+  }
+
+  function mainHeaders(): string[] {
+    return screen.getAllByRole('columnheader').map((cell) => cell.textContent ?? '')
+  }
+
+  const rowWithComment: DemarcacionRow = {
+    ...registeredRow,
+    folioDemarcacion: {
+      ...registeredRow.folioDemarcacion!,
+      statusDescription: 'Falta INE',
+    },
+  }
+
+  it('REGISTER: sees Excel, Eliminar, Comentarios (solo lectura) and Estatus in order', () => {
+    setRole('REGISTER')
+    renderTable([rowWithComment])
+
+    expect(mainHeaders()).toEqual([
+      '',
+      'Demarcación',
+      'Pre Candidatos',
+      'Excel',
+      'Eliminar',
+      'Comentarios',
+      'Estatus',
+    ])
+    expect(screen.getByText('Falta INE')).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Validar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Acciones' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('columnheader', { name: 'Status' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('REGISTER: shows an em dash in Comentarios when there is no comment', () => {
+    setRole('REGISTER')
+    renderTable([registeredRow]) // statusDescription: null
+
+    expect(screen.getByText('—')).toBeInTheDocument()
+  })
+
+  it('REGISTER: expanded row uses colSpan 7', () => {
+    setRole('REGISTER')
+    renderTable([registeredRow])
+
+    expandFirstRow()
+
+    expect(document.querySelector('td[colspan="7"]')).not.toBeNull()
+    expect(document.querySelector('td[colspan="9"]')).toBeNull()
+  })
+
+  it('ADMIN in upload mode: sees the union of REGISTER and VALIDATOR columns', () => {
+    setRole('ADMIN')
+    renderTable([registeredRow])
+
+    expect(mainHeaders()).toEqual([
+      '',
+      'Demarcación',
+      'Pre Candidatos',
+      'Excel',
+      'Eliminar',
+      'Comentarios',
+      'Estatus',
+      'Validar',
+      'Acciones',
+    ])
+    // Comentarios de ADMIN es editable (poder de VALIDATOR)
+    expect(screen.getByPlaceholderText('Comentario...')).toBeInTheDocument()
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+  })
+
+  it('ADMIN in upload mode: saves status and comment through onSaveStatus', async () => {
+    setRole('ADMIN')
+    const onSaveStatus = vi.fn().mockResolvedValue(undefined)
+    renderTable([registeredRow], undefined, onSaveStatus)
+
+    fireEvent.change(screen.getByPlaceholderText('Comentario...'), {
+      target: { value: 'Comentario del admin' },
+    })
+    const saveButton = screen.getByRole('button', { name: 'Guardar' })
+    expect(saveButton).toBeEnabled()
+
+    fireEvent.click(saveButton)
+
+    await waitFor(() =>
+      expect(onSaveStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ catalogo: expect.objectContaining({ id: 1 }) }),
+        StatusEnum.VALIDO,
+        'Comentario del admin'
+      )
+    )
+  })
+
+  it('ADMIN in upload mode: expanded row uses colSpan 9', () => {
+    setRole('ADMIN')
+    renderTable([registeredRow])
+
+    expandFirstRow()
+
+    expect(document.querySelector('td[colspan="9"]')).not.toBeNull()
+    expect(document.querySelector('td[colspan="7"]')).toBeNull()
+  })
+
+  it('ADMIN in validate mode: also sees Excel and Eliminar (9 columns)', () => {
+    setRole('ADMIN')
+    renderTable([registeredRow], 'validate')
+
+    expect(mainHeaders()).toEqual([
+      '',
+      'Demarcación',
+      'Pre Candidatos',
+      'Excel',
+      'Eliminar',
+      'Comentarios',
+      'Estatus',
+      'Validar',
+      'Acciones',
+    ])
+  })
+
+  it('VALIDATOR: keeps its original validate layout without Excel/Eliminar', () => {
+    setRole('VALIDATOR')
+    renderTable([registeredRow], 'validate')
+
+    expect(mainHeaders()).toEqual([
+      '',
+      'Demarcación',
+      'Pre Candidatos',
+      'Estatus',
+      'Validar',
+      'Comentarios',
+      'Acciones',
+    ])
+    expect(screen.queryByRole('columnheader', { name: 'Excel' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument()
+  })
+
+  it('renames the status filter label to Estatus in every view', () => {
+    setRole('ADMIN')
+    renderTable([registeredRow])
+
+    expect(screen.getAllByText('Estatus').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Status')).not.toBeInTheDocument()
   })
 })

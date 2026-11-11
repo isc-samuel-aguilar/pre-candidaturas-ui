@@ -102,7 +102,9 @@ export function DemarcacionTable({
   const [searchText, setSearchText] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
-  const [expandedBranches, setExpandedBranches] = useState<Map<number, 'pre' | 'fur'>>(
+  // Cada demarcacion guarda sus ramas abiertas en un Set: "Pre Candidatos" y
+  // "Documentos por demarcacion" se expanden/colapsan de forma independiente
+  const [expandedBranches, setExpandedBranches] = useState<Map<number, Set<'pre' | 'fur'>>>(
     new Map()
   )
   const [rowEdits, setRowEdits] = useState<Map<number, RowEditState>>(new Map())
@@ -113,7 +115,22 @@ export function DemarcacionTable({
   const { user } = useAuth()
 
   const isValidateMode = mode === 'validate'
-  const totalColumns = isValidateMode ? 7 : 6
+  // Visibilidad de columnas por rol: ADMIN ve la union de REGISTER y VALIDATOR.
+  // Columnas futuras: anadir su condicion aqui, en la cabecera y en el cuerpo.
+  const role = user?.role
+  const isRegister = role === 'REGISTER'
+  const isValidator = role === 'VALIDATOR'
+  const isAdmin = role === 'ADMIN'
+  const showUploadCols = isRegister || isAdmin
+  const showValidateCols = isValidator || isAdmin
+  // Cuadra celda por celda con la cabecera/cuerpo (y con el colSpan de la fila expandida)
+  const totalColumns =
+    3 + // checkbox + Demarcación + Pre Candidatos
+    (showUploadCols ? 3 : 0) + // Excel + Eliminar + Comentarios (REGISTER lectura / ADMIN edición)
+    1 + // Estatus
+    (showValidateCols ? 1 : 0) + // Validar
+    (isValidator ? 1 : 0) + // Comentarios (tras Validar, sólo VALIDATOR)
+    (showValidateCols ? 1 : 0) // Acciones
 
   const filteredDemarcaciones = useMemo(() => {
     return demarcaciones
@@ -203,7 +220,9 @@ export function DemarcacionTable({
       if (defaultBranch) {
         setExpandedBranches((prev) => {
           const next = new Map(prev)
-          next.set(catalogoId, defaultBranch)
+          const branches = new Set(next.get(catalogoId) ?? [])
+          branches.add(defaultBranch)
+          next.set(catalogoId, branches)
           return next
         })
       }
@@ -225,10 +244,16 @@ export function DemarcacionTable({
   const handleToggleBranch = (catalogoId: number, branch: 'pre' | 'fur') => {
     setExpandedBranches((prev) => {
       const next = new Map(prev)
-      if (next.get(catalogoId) === branch) {
+      const branches = new Set(next.get(catalogoId) ?? [])
+      if (branches.has(branch)) {
+        branches.delete(branch)
+      } else {
+        branches.add(branch)
+      }
+      if (branches.size === 0) {
         next.delete(catalogoId)
       } else {
-        next.set(catalogoId, branch)
+        next.set(catalogoId, branches)
       }
       return next
     })
@@ -319,10 +344,10 @@ export function DemarcacionTable({
           }}
         />
         <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel>Status</InputLabel>
+          <InputLabel>Estatus</InputLabel>
           <Select
             value={statusFilter}
-            label="Status"
+            label="Estatus"
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             {STATUS_OPTIONS.map((option) => (
@@ -341,12 +366,13 @@ export function DemarcacionTable({
               <TableCell padding="checkbox" />
               <TableCell>Demarcación</TableCell>
               <TableCell align="center">Pre Candidatos</TableCell>
-              {!isValidateMode && <TableCell align="center">Excel</TableCell>}
-              {!isValidateMode && <TableCell align="center">Eliminar</TableCell>}
-              <TableCell align="center">Status</TableCell>
-              {isValidateMode && <TableCell align="center">Validar</TableCell>}
-              {isValidateMode && <TableCell>Comentarios</TableCell>}
-              {isValidateMode && <TableCell align="center">Acciones</TableCell>}
+              {showUploadCols && <TableCell align="center">Excel</TableCell>}
+              {showUploadCols && <TableCell align="center">Eliminar</TableCell>}
+              {showUploadCols && <TableCell>Comentarios</TableCell>}
+              <TableCell align="center">Estatus</TableCell>
+              {showValidateCols && <TableCell align="center">Validar</TableCell>}
+              {isValidator && <TableCell>Comentarios</TableCell>}
+              {showValidateCols && <TableCell align="center">Acciones</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -420,7 +446,7 @@ export function DemarcacionTable({
                         Pre Candidatos
                       </Button>
                     </TableCell>
-                    {!isValidateMode && (
+                    {showUploadCols && (
                       <TableCell align="center">
                         <input
                           type="file"
@@ -444,7 +470,7 @@ export function DemarcacionTable({
                         </Button>
                       </TableCell>
                     )}
-                    {!isValidateMode && (
+                    {showUploadCols && (
                       <TableCell align="center">
                         <Button
                           variant="outlined"
@@ -456,6 +482,24 @@ export function DemarcacionTable({
                         >
                           Eliminar
                         </Button>
+                      </TableCell>
+                    )}
+                    {showUploadCols && (
+                      <TableCell sx={{ whiteSpace: 'normal' }}>
+                        {isAdmin ? (
+                          <TextField
+                            size="small"
+                            fullWidth
+                            multiline
+                            maxRows={3}
+                            placeholder="Comentario..."
+                            value={getRowEdit(row).comment}
+                            disabled={!row.folioDemarcacion || getRowEdit(row).saving}
+                            onChange={(e) => patchRowEdit(row, { comment: e.target.value })}
+                          />
+                        ) : (
+                          row.folioDemarcacion?.statusDescription || '—'
+                        )}
                       </TableCell>
                     )}
                     <TableCell align="center">
@@ -474,7 +518,7 @@ export function DemarcacionTable({
                         </Typography>
                       </Box>
                     </TableCell>
-                    {isValidateMode && (
+                    {showValidateCols && (
                       <TableCell align="center">
                         <TextField
                           select
@@ -497,7 +541,7 @@ export function DemarcacionTable({
                         </TextField>
                       </TableCell>
                     )}
-                    {isValidateMode && (
+                    {isValidator && (
                       <TableCell>
                         <TextField
                           size="small"
@@ -511,7 +555,7 @@ export function DemarcacionTable({
                         />
                       </TableCell>
                     )}
-                    {isValidateMode && (
+                    {showValidateCols && (
                       <TableCell align="center">
                         <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
                           <Button
@@ -557,7 +601,7 @@ export function DemarcacionTable({
                                       aria-label="Expandir Documentos por demarcación"
                                       onClick={() => handleToggleBranch(row.catalogo.id, 'fur')}
                                     >
-                                      {expandedBranches.get(row.catalogo.id) === 'fur' ? (
+                                      {expandedBranches.get(row.catalogo.id)?.has('fur') ? (
                                         <KeyboardArrowDownIcon />
                                       ) : (
                                         <KeyboardArrowRightIcon />
@@ -569,7 +613,7 @@ export function DemarcacionTable({
                                   </Box>
                                 </TableCell>
                               </TableRow>
-                              {expandedBranches.get(row.catalogo.id) === 'fur' && (
+                              {expandedBranches.get(row.catalogo.id)?.has('fur') && (
                                 <TableRow>
                                   <TableCell sx={{ pl: 6 }}>
                                     <DemarcacionDocumentsTable
@@ -589,7 +633,7 @@ export function DemarcacionTable({
                                       aria-label="Expandir Pre Candidatos"
                                       onClick={() => handleToggleBranch(row.catalogo.id, 'pre')}
                                     >
-                                      {expandedBranches.get(row.catalogo.id) === 'pre' ? (
+                                      {expandedBranches.get(row.catalogo.id)?.has('pre') ? (
                                         <KeyboardArrowDownIcon />
                                       ) : (
                                         <KeyboardArrowRightIcon />
@@ -601,7 +645,7 @@ export function DemarcacionTable({
                                   </Box>
                                 </TableCell>
                               </TableRow>
-                              {expandedBranches.get(row.catalogo.id) === 'pre' && (
+                              {expandedBranches.get(row.catalogo.id)?.has('pre') && (
                                 <TableRow>
                                   <TableCell sx={{ pl: 6 }}>
                                     <PrecandidatosTable
@@ -612,7 +656,6 @@ export function DemarcacionTable({
                                       allowDocActions={!isValidateMode}
                                       allowDocValidation={isValidateMode}
                                       groupDocuments
-                                      showGenerateColumn={!isValidateMode}
                                     />
                                   </TableCell>
                                 </TableRow>

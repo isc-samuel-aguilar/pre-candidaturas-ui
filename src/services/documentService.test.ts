@@ -15,6 +15,7 @@ import {
   generateDemarcationDocument,
   downloadGeneratedDemarcationDocument,
   toDocumentoKey,
+  getDocumentDisplayName,
   updateDocumentStatus,
   updateDemarcationDocumentStatus,
 } from './documentService'
@@ -511,6 +512,24 @@ describe('toDocumentoKey', () => {
     expect(toDocumentoKey('CV PUBLICO APP.pdf')).toBe('CV_PUBLICO_APP')
     expect(toDocumentoKey('CV PRIVADO APP.pdf')).toBe('CV_PRIVADO_APP')
     expect(toDocumentoKey('FORMATO DE DECLARACION APP.pdf')).toBe('FORMATO_DE_DECLARACION_APP')
+  })
+})
+
+describe('getDocumentDisplayName', () => {
+  it('maps the three signable DOCUMENT_TYPE values to their generated PDF names', () => {
+    expect(getDocumentDisplayName('FORMATO DECL PATRI')).toBe('FORMATO DE DECLARACION APP.pdf')
+    expect(getDocumentDisplayName('CV PRIV')).toBe('CV PRIVADO APP.pdf')
+    expect(getDocumentDisplayName('CV PUB')).toBe('CV PUBLICO APP.pdf')
+  })
+
+  it('returns the raw catalog value when there is no display name', () => {
+    expect(getDocumentDisplayName('INE')).toBe('INE')
+    expect(getDocumentDisplayName('ACTA')).toBe('ACTA')
+    expect(getDocumentDisplayName('FOTO')).toBe('FOTO')
+  })
+
+  it('never returns an empty label', () => {
+    expect(getDocumentDisplayName('')).toBe('')
   })
 })
 

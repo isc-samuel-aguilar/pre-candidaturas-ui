@@ -10,9 +10,27 @@ const OFFICE_TYPES = [
 ]
 const OFFICE_EXTENSIONS = /\.(doc|docx|xls|xlsx|ppt|pptx)$/i
 
-const MAX_IMAGE_SIZE = 1 * 1024 * 1024
-const MAX_PDF_SIZE = 2 * 1024 * 1024
-const MAX_OFFICE_SIZE = 5 * 1024 * 1024
+const EXECUTABLE_EXTENSIONS =
+  /\.(exe|msi|bat|cmd|com|scr|pif|jar|vbs|ps1|sh|apk|dll|sys|reg|lnk|wsf|hta|iso|bin|run|dmg|pkg|deb|rpm|app|elf|so)$/i
+const EXECUTABLE_TYPES = [
+  'application/x-msdownload',
+  'application/x-msdos-program',
+  'application/x-ms-installer',
+  'application/vnd.microsoft.portable-executable',
+  'application/x-executable',
+  'application/x-sharedlib',
+  'application/x-sh',
+  'application/x-bat',
+  'application/java-archive',
+  'application/x-java-archive',
+  'application/vnd.android.package-archive',
+  'application/x-apple-disk-image',
+]
+
+// Limite unico de validacion para cualquier tipo de archivo subido
+const MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+// Objetivo de compresion de imagenes (se convierten siempre a JPG)
+const COMPRESS_TARGET_SIZE = 1 * 1024 * 1024
 const MAX_IMAGE_DIMENSION = 1920
 
 export function isImageFile(file: File): boolean {
@@ -27,21 +45,36 @@ export function isOfficeFile(file: File): boolean {
   return OFFICE_TYPES.includes(file.type) || OFFICE_EXTENSIONS.test(file.name)
 }
 
+export function isExecutableFile(file: File): boolean {
+  return EXECUTABLE_TYPES.includes(file.type) || EXECUTABLE_EXTENSIONS.test(file.name)
+}
+
 export interface ValidateFileOptions {
   allowOffice?: boolean
+}
+
+function buildSizeError(label: string, file: File): { valid: false; error: string } {
+  const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
+  return {
+    valid: false,
+    error: `${label} pesa ${sizeMB} MB. El máximo permitido es 10 MB`,
+  }
 }
 
 export function validateFile(
   file: File,
   options: ValidateFileOptions = {}
 ): { valid: boolean; error?: string } {
+  if (isExecutableFile(file)) {
+    return {
+      valid: false,
+      error: 'No se permiten archivos ejecutables',
+    }
+  }
+
   if (options.allowOffice && isOfficeFile(file)) {
-    if (file.size > MAX_OFFICE_SIZE) {
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
-      return {
-        valid: false,
-        error: `El archivo ofimático pesa ${sizeMB} MB. El máximo permitido es 5 MB`,
-      }
+    if (file.size > MAX_UPLOAD_SIZE) {
+      return buildSizeError('El archivo ofimático', file)
     }
     return { valid: true }
   }
@@ -53,12 +86,8 @@ export function validateFile(
     }
   }
 
-  if (isPdfFile(file) && file.size > MAX_PDF_SIZE) {
-    const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
-    return {
-      valid: false,
-      error: `El PDF pesa ${sizeMB} MB. El máximo permitido es 2 MB`,
-    }
+  if (file.size > MAX_UPLOAD_SIZE) {
+    return buildSizeError(isPdfFile(file) ? 'El PDF' : 'La imagen', file)
   }
 
   return { valid: true }
@@ -93,6 +122,9 @@ function imageToBlob(
       return
     }
 
+    // Fondo blanco: JPEG no soporta transparencia (el canvas la pintaria de negro)
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect(0, 0, width, height)
     ctx.drawImage(img, 0, 0, width, height)
     canvas.toBlob(
       (blob) => {
@@ -114,11 +146,14 @@ function loadImage(file: File): Promise<HTMLImageElement> {
   })
 }
 
-export async function compressImage(file: File, maxSizeBytes: number = MAX_IMAGE_SIZE): Promise<File> {
-  if (file.size <= maxSizeBytes) {
-    return file
-  }
+function toJpegFilename(name: string): string {
+  return /\.[^.]+$/.test(name) ? name.replace(/\.[^.]+$/, '.jpg') : `${name}.jpg`
+}
 
+export async function compressImage(
+  file: File,
+  maxSizeBytes: number = COMPRESS_TARGET_SIZE
+): Promise<File> {
   const img = await loadImage(file)
   const { width, height } = getTargetDimensions(img.naturalWidth, img.naturalHeight)
 
@@ -126,7 +161,7 @@ export async function compressImage(file: File, maxSizeBytes: number = MAX_IMAGE
   for (const quality of qualities) {
     const blob = await imageToBlob(img, width, height, quality)
     if (blob.size <= maxSizeBytes) {
-      return new File([blob], file.name, { type: 'image/jpeg' })
+      return new File([blob], toJpegFilename(file.name), { type: 'image/jpeg' })
     }
   }
 
@@ -135,9 +170,5 @@ export async function compressImage(file: File, maxSizeBytes: number = MAX_IMAGE
   const smallHeight = Math.round(height * scale)
   const blob = await imageToBlob(img, smallWidth, smallHeight, 0.3)
 
-  if (blob.size <= maxSizeBytes) {
-    return new File([blob], file.name, { type: 'image/jpeg' })
-  }
-
-  return new File([blob], file.name, { type: 'image/jpeg' })
+  return new File([blob], toJpegFilename(file.name), { type: 'image/jpeg' })
 }

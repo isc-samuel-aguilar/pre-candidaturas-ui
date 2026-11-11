@@ -26,14 +26,12 @@ import { getPrecandidatos } from '../services/demarcacionService'
 import {
   getDocumentsByPrecandidato,
   getDocumentTypes,
-  getGeneratedDocumentTypes,
   uploadDocument,
   deleteDocument,
   downloadDocumentFile,
   generateDocumentForSign,
-  toDocumentoKey,
+  getDocumentDisplayName,
   updateDocumentStatus,
-  GENERATED_DOCUMENT_KEY,
   GENERATABLE_DOCUMENT_TYPES,
   type UpdateDocumentStatusPayload,
 } from '../services/documentService'
@@ -63,10 +61,30 @@ interface PrecandidatosTableProps {
   allowDocActions?: boolean
   allowDocValidation?: boolean
   groupDocuments?: boolean
-  showGenerateColumn?: boolean
 }
 
-type DocRowKey = 'validate' | 'sign'
+// Tipos DOCUMENT_TYPE con plantilla propia: se despliegan en "Documentos por firmar y validar"
+function isSignDocument(catalogType: string): boolean {
+  return catalogType in GENERATABLE_DOCUMENT_TYPES
+}
+
+// 'legacy' = tabla unica sin columna de firma (vista detalle)
+// 'validate' / 'sign' = secciones agrupadas del excel (comparten grid de columnas)
+type DocSection = 'legacy' | 'validate' | 'sign'
+
+// Pesos relativos de columna: cada seccion los normaliza a 100% en su colgroup
+// y, como las 2 secciones agrupadas comparten flags, ambos colgroup quedan identicos
+const DOC_COLUMN_WEIGHTS = {
+  tipo: 14,
+  sign: 18,
+  subir: 13,
+  nombre: 26,
+  eliminar: 13,
+  status: 14,
+  validar: 18,
+  comentario: 34,
+  acciones: 16,
+} as const
 
 function getStatusLabel(status?: StatusEnum | null) {
   switch (status) {
@@ -110,11 +128,6 @@ function mergeDocs(documentTypes: KeyValueCatalog[], existingDocs: Documento[]):
   })
 }
 
-function areAllDocsValid(rows: DocumentRow[] | undefined): boolean {
-  if (!rows) return false
-  return rows.every((row) => row.document !== null && row.document.status === StatusEnum.VALIDO)
-}
-
 export function PrecandidatosTable({
   folioId,
   demarcacionName,
@@ -125,16 +138,13 @@ export function PrecandidatosTable({
   allowDocActions = true,
   allowDocValidation = false,
   groupDocuments = false,
-  showGenerateColumn = false,
 }: PrecandidatosTableProps) {
-  const { token, user } = useAuth()
+  const { token } = useAuth()
   const [precandidatos, setPrecandidatos] = useState<Precandidato[]>([])
   const [loading, setLoading] = useState(autoLoad)
   const [error, setError] = useState<string | null>(null)
   const [expandedPrecandidato, setExpandedPrecandidato] = useState<number | null>(null)
-  const [expandedDocRow, setExpandedDocRow] = useState<DocRowKey | null>(null)
   const [documentsMap, setDocumentsMap] = useState<Map<number, DocumentRow[]>>(new Map())
-  const [rawDocsMap, setRawDocsMap] = useState<Map<number, Documento[]>>(new Map())
   const [loadingDocs, setLoadingDocs] = useState<Set<number>>(new Set())
   const [uploadingDocs, setUploadingDocs] = useState<Set<string>>(new Set())
   const [downloadingDocs, setDownloadingDocs] = useState<Set<string>>(new Set())
@@ -147,9 +157,6 @@ export function PrecandidatosTable({
     severity: 'success' | 'error' | 'info'
   }>({ open: false, message: '', severity: 'success' })
   const [documentTypes, setDocumentTypes] = useState<KeyValueCatalog[]>([])
-  const [generatedTypes, setGeneratedTypes] = useState<KeyValueCatalog[] | null>(null)
-  const [loadingGeneratedTypes, setLoadingGeneratedTypes] = useState(false)
-  const [generatedTypesError, setGeneratedTypesError] = useState(false)
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map())
   const isDocsEnabled =
     (allowDocActions || allowDocValidation) && demarcacionStatus === StatusEnum.VALIDO
@@ -185,7 +192,6 @@ export function PrecandidatosTable({
       try {
         const existingDocs = await getDocumentsByPrecandidato(precandidatoId)
         const merged = mergeDocs(documentTypes, existingDocs)
-        setRawDocsMap((prev) => new Map(prev).set(precandidatoId, existingDocs))
         setDocumentsMap((prev) => new Map(prev).set(precandidatoId, merged))
         setDocsErrorIds((prev) => {
           const next = new Set(prev)
@@ -194,11 +200,6 @@ export function PrecandidatosTable({
         })
         return merged
       } catch {
-        setRawDocsMap((prev) => {
-          const next = new Map(prev)
-          next.delete(precandidatoId)
-          return next
-        })
         setDocumentsMap((prev) => {
           const next = new Map(prev)
           next.delete(precandidatoId)
@@ -215,8 +216,6 @@ export function PrecandidatosTable({
     `${p.apellidoPaterno} ${p.apellidoMaterno} ${p.nombre}`.trim()
 
   const handleTogglePrecandidato = async (precandidatoId: number) => {
-    setExpandedDocRow(null)
-
     if (expandedPrecandidato === precandidatoId) {
       setExpandedPrecandidato(null)
       return
@@ -224,12 +223,10 @@ export function PrecandidatosTable({
 
     setExpandedPrecandidato(precandidatoId)
 
-    let rows = documentsMap.get(precandidatoId)
-
-    if (!rows && !loadingDocs.has(precandidatoId)) {
+    if (!documentsMap.has(precandidatoId) && !loadingDocs.has(precandidatoId)) {
       setLoadingDocs((prev) => new Set(prev).add(precandidatoId))
       try {
-        rows = (await refreshDocs(precandidatoId)) ?? undefined
+        await refreshDocs(precandidatoId)
       } finally {
         setLoadingDocs((prev) => {
           const next = new Set(prev)
@@ -238,39 +235,6 @@ export function PrecandidatosTable({
         })
       }
     }
-
-    // REGISTER: si el precandidato no tiene todos sus documentos válidos,
-    // se auto-expande la fila "Documentos por validar"
-    if (
-      user?.role === 'REGISTER' &&
-      rows &&
-      rows.length > 0 &&
-      !areAllDocsValid(rows)
-    ) {
-      setExpandedDocRow('validate')
-    }
-  }
-
-  const handleToggleDocRow = async (row: DocRowKey) => {
-    if (row === 'sign') {
-      const merged = expandedPrecandidato !== null ? documentsMap.get(expandedPrecandidato) : undefined
-      if (!areAllDocsValid(merged)) return
-
-      if (generatedTypes === null && !loadingGeneratedTypes) {
-        setGeneratedTypesError(false)
-        setLoadingGeneratedTypes(true)
-        try {
-          const types = await getGeneratedDocumentTypes()
-          setGeneratedTypes(types)
-        } catch {
-          setGeneratedTypesError(true)
-        } finally {
-          setLoadingGeneratedTypes(false)
-        }
-      }
-    }
-
-    setExpandedDocRow((prev) => (prev === row ? null : row))
   }
 
   const getDownloadKey = (claveIfe: string, documentoKey: string) =>
@@ -283,12 +247,14 @@ export function PrecandidatosTable({
   ) => {
     if (!token) return
 
-    const documentoKey = toDocumentoKey(catalogValue)
-    const downloadKey = getDownloadKey(claveIfe, documentoKey)
+    const templateKey = GENERATABLE_DOCUMENT_TYPES[catalogValue]
+    if (!templateKey) return
+
+    const downloadKey = getDownloadKey(claveIfe, templateKey)
     setDownloadingDocs((prev) => new Set(prev).add(downloadKey))
 
     try {
-      await generateDocumentForSign(precandidatoId, documentoKey, token)
+      await generateDocumentForSign(precandidatoId, templateKey, token)
       setSnackbar({ open: true, message: 'Documento generado', severity: 'success' })
     } catch (err) {
       setSnackbar({
@@ -392,8 +358,7 @@ export function PrecandidatosTable({
   const handleFileSelect = async (
     precandidatoId: number,
     docType: string,
-    file: File | null,
-    catalogKey?: string
+    file: File | null
   ) => {
     if (!file) return
 
@@ -419,7 +384,7 @@ export function PrecandidatosTable({
     setUploadingDocs((prev) => new Set(prev).add(uploadKey))
 
     try {
-      await uploadDocument(precandidatoId, docType, finalFile, catalogKey)
+      await uploadDocument(precandidatoId, docType, finalFile)
       await refreshDocs(precandidatoId)
     } catch {
       // error handled by parent
@@ -477,280 +442,294 @@ export function PrecandidatosTable({
   // "Docs Válidos" (antes había drift: 9/29 celdas frente a colSpan 10/30)
   const totalColumns = isDetailMode ? 30 : 10
 
+  const getDocColumnWeights = (section: DocSection): number[] => {
+    const weights: number[] = [DOC_COLUMN_WEIGHTS.tipo]
+    if (section !== 'legacy') weights.push(DOC_COLUMN_WEIGHTS.sign)
+    if (allowDocActions) weights.push(DOC_COLUMN_WEIGHTS.subir)
+    weights.push(DOC_COLUMN_WEIGHTS.nombre)
+    if (allowDocActions) weights.push(DOC_COLUMN_WEIGHTS.eliminar)
+    weights.push(DOC_COLUMN_WEIGHTS.status)
+    if (allowDocValidation) {
+      weights.push(
+        DOC_COLUMN_WEIGHTS.validar,
+        DOC_COLUMN_WEIGHTS.comentario,
+        DOC_COLUMN_WEIGHTS.acciones
+      )
+    }
+    return weights
+  }
+
   const renderDocsTable = (
     rows: DocumentRow[],
     precandidatoId: number,
-    showSignColumn: boolean,
+    section: DocSection,
     claveIfe: string
-  ) => (
-    <Table size="small">
-      <TableHead>
-        <TableRow>
-          <TableCell>Tipo</TableCell>
-          {showSignColumn && <TableCell align="center">Descargar para firmar</TableCell>}
-          {showGenerateColumn && !showSignColumn && (
-            <TableCell align="center">Generar</TableCell>
-          )}
-          <TableCell>Nombre</TableCell>
-          {allowDocActions && <TableCell align="center">Subir</TableCell>}
-          {allowDocActions && <TableCell align="center">Eliminar</TableCell>}
-          <TableCell align="center">Status</TableCell>
-          {allowDocValidation && (
-            <TableCell align="center">Validar</TableCell>
-          )}
-          {allowDocValidation && <TableCell>Comentario</TableCell>}
-          {allowDocValidation && (
-            <TableCell align="center">Acciones</TableCell>
-          )}
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {rows.map((row) => {
-          const doc = row.document
-          const status = doc?.status ?? null
-          const uploadKey = `${precandidatoId}-${row.catalogType}`
-          const editKey = getDocEditKey(precandidatoId, row.catalogType)
-          const isUploading = uploadingDocs.has(uploadKey)
-          const hasFile = doc !== null
-          const downloadKey = getDownloadKey(claveIfe, toDocumentoKey(row.catalogType))
-          const isDownloading = downloadingDocs.has(downloadKey)
-          // Clave de catalogo con plantilla propia para generar (INE/ACTA/FOTO no tienen)
-          const generateDocKey = GENERATABLE_DOCUMENT_TYPES[row.catalogType]
-          const isGenerating =
-            generateDocKey !== undefined &&
-            downloadingDocs.has(getDownloadKey(claveIfe, generateDocKey))
+  ) => {
+    const showSignColumn = section === 'sign'
+    // Las 2 secciones agrupadas comparten el grid de columnas: en "Archivos para subir"
+    // la celda Tipo cubre Tipo + Descargar para firmar (colSpan=2) para alinear el resto
+    const tipoColSpan = section === 'validate' ? 2 : 1
+    const weights = getDocColumnWeights(section)
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
 
-          return (
-            <TableRow key={row.catalogType} hover>
-              <TableCell>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {row.catalogType}
-                </Typography>
-              </TableCell>
-              {showSignColumn && (
-                <TableCell align="center">
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={() =>
-                      handleDownloadForSign(precandidatoId, claveIfe, row.catalogType)
-                    }
-                    disabled={isDownloading}
-                    startIcon={isDownloading ? <CircularProgress size={14} /> : undefined}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    Descargar y firmar
-                  </Button>
-                </TableCell>
-              )}
-              {showGenerateColumn && !showSignColumn && (
-                <TableCell align="center">
-                  {generateDocKey !== undefined ? (
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={() =>
-                        handleDownloadForSign(precandidatoId, claveIfe, generateDocKey)
-                      }
-                      disabled={isGenerating}
-                      startIcon={isGenerating ? <CircularProgress size={14} /> : undefined}
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Generar
-                    </Button>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      -
-                    </Typography>
-                  )}
-                </TableCell>
-              )}
-              <TableCell>
-                {hasFile ? (
-                  <Button
-                    variant="text"
-                    size="small"
-                    onClick={() => doc && token && downloadDocumentFile(doc, token)}
-                    sx={{ textTransform: 'none', color: 'primary.main', justifyContent: 'flex-start' }}
-                  >
-                    {doc?.originalFilename || row.catalogType}
-                  </Button>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    -
+    return (
+      <Table size="small" sx={{ width: '100%', tableLayout: 'fixed' }}>
+        <colgroup>
+          {weights.map((weight, index) => (
+            <col
+              key={index}
+              style={{ width: `${((weight / totalWeight) * 100).toFixed(2)}%` }}
+            />
+          ))}
+        </colgroup>
+        <TableHead>
+          <TableRow>
+            <TableCell colSpan={tipoColSpan}>Tipo</TableCell>
+            {showSignColumn && (
+              <TableCell align="center">Descargar para firmar</TableCell>
+            )}
+            {allowDocActions && <TableCell align="center">Subir</TableCell>}
+            <TableCell>Nombre</TableCell>
+            {allowDocActions && <TableCell align="center">Eliminar</TableCell>}
+            <TableCell align="center">Status</TableCell>
+            {allowDocValidation && (
+              <TableCell align="center">Validar</TableCell>
+            )}
+            {allowDocValidation && <TableCell>Comentario</TableCell>}
+            {allowDocValidation && (
+              <TableCell align="center">Acciones</TableCell>
+            )}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row) => {
+            const doc = row.document
+            const status = doc?.status ?? null
+            const uploadKey = `${precandidatoId}-${row.catalogType}`
+            const editKey = getDocEditKey(precandidatoId, row.catalogType)
+            const isUploading = uploadingDocs.has(uploadKey)
+            const hasFile = doc !== null
+            // Clave de catalogo con plantilla propia para generar (INE/ACTA/FOTO no tienen)
+            const generateDocKey = GENERATABLE_DOCUMENT_TYPES[row.catalogType]
+            const isDownloading =
+              generateDocKey !== undefined &&
+              downloadingDocs.has(getDownloadKey(claveIfe, generateDocKey))
+
+            return (
+              <TableRow key={row.catalogType} hover>
+                <TableCell colSpan={tipoColSpan}>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {getDocumentDisplayName(row.catalogType)}
                   </Typography>
+                </TableCell>
+                {showSignColumn && (
+                  <TableCell align="center">
+                    {generateDocKey !== undefined ? (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() =>
+                          handleDownloadForSign(precandidatoId, claveIfe, row.catalogType)
+                        }
+                        disabled={isDownloading}
+                        startIcon={isDownloading ? <CircularProgress size={14} /> : undefined}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        Descargar y firmar
+                      </Button>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    )}
+                  </TableCell>
                 )}
-              </TableCell>
-              {allowDocActions && (
-                <TableCell align="center">
-                  <input
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
-                    style={{ display: 'none' }}
-                    ref={(el) => {
-                      if (el) fileInputRefs.current.set(uploadKey, el)
-                    }}
-                    onChange={(e) =>
-                      handleFileSelect(
-                        precandidatoId,
-                        row.catalogType,
-                        e.target.files?.[0] || null,
-                        showSignColumn ? GENERATED_DOCUMENT_KEY : undefined
-                      )
-                    }
-                  />
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={isUploading ? <CircularProgress size={14} /> : <CloudUploadIcon />}
-                    onClick={() => fileInputRefs.current.get(uploadKey)?.click()}
-                    disabled={!isDocsEnabled || isUploading || hasFile}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    Subir
-                  </Button>
-                </TableCell>
-              )}
-              {allowDocActions && (
-                <TableCell align="center">
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    color="error"
-                    startIcon={<DeleteIcon />}
-                    disabled={!hasFile || !doc}
-                    onClick={() => doc && handleDeleteDoc(precandidatoId, doc.id)}
-                    sx={{ textTransform: 'none' }}
-                  >
-                    Eliminar
-                  </Button>
-                </TableCell>
-              )}
-              <TableCell align="center">
-                {hasFile ? (
-                  <Chip
-                    label={getStatusLabel(status)}
-                    size="small"
-                    sx={{
-                      backgroundColor: getStatusColor(status).bg,
-                      color: getStatusColor(status).color,
-                      fontWeight: 500,
-                      height: 20,
-                      fontSize: '0.7rem',
-                    }}
-                  />
-                ) : (
-                  <Chip
-                    label="Sin Cargar"
-                    size="small"
-                    sx={{
-                      backgroundColor: EMPTY_STATUS_STYLE.bg,
-                      color: EMPTY_STATUS_STYLE.color,
-                      fontWeight: 500,
-                      height: 20,
-                      fontSize: '0.7rem',
-                    }}
-                  />
-                )}
-              </TableCell>
-              {allowDocValidation && (
-                <TableCell align="center">
-                  {hasFile && doc ? (
-                    <TextField
-                      select
-                      size="small"
-                      label="Validar"
-                      value={getDocEdit(editKey, doc).status}
-                      disabled={getDocEdit(editKey, doc).saving}
+                {allowDocActions && (
+                  <TableCell align="center">
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
+                      style={{ display: 'none' }}
+                      ref={(el) => {
+                        if (el) fileInputRefs.current.set(uploadKey, el)
+                      }}
                       onChange={(e) =>
-                        patchDocEdit(editKey, doc, {
-                          status: e.target.value as StatusEnum | '',
-                        })
-                      }
-                      sx={{ minWidth: 120 }}
-                    >
-                      <MenuItem value="">
-                        <em>Seleccionar</em>
-                      </MenuItem>
-                      <MenuItem value={StatusEnum.VALIDO}>Válido</MenuItem>
-                      <MenuItem value={StatusEnum.ERROR}>Error</MenuItem>
-                    </TextField>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      -
-                    </Typography>
-                  )}
-                </TableCell>
-              )}
-              {allowDocValidation && (
-                <TableCell>
-                  {hasFile && doc ? (
-                    <TextField
-                      size="small"
-                      fullWidth
-                      multiline
-                      maxRows={3}
-                      placeholder="Comentario..."
-                      value={getDocEdit(editKey, doc).comment}
-                      disabled={getDocEdit(editKey, doc).saving}
-                      onChange={(e) =>
-                        patchDocEdit(editKey, doc, {
-                          comment: e.target.value,
-                        })
+                        handleFileSelect(
+                          precandidatoId,
+                          row.catalogType,
+                          e.target.files?.[0] || null
+                        )
                       }
                     />
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={isUploading ? <CircularProgress size={14} /> : <CloudUploadIcon />}
+                      onClick={() => fileInputRefs.current.get(uploadKey)?.click()}
+                      disabled={!isDocsEnabled || isUploading || hasFile}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Subir
+                    </Button>
+                  </TableCell>
+                )}
+                <TableCell>
+                  {hasFile ? (
+                    <Button
+                      variant="text"
+                      size="small"
+                      onClick={() => doc && token && downloadDocumentFile(doc, token)}
+                      sx={{ textTransform: 'none', color: 'primary.main', justifyContent: 'flex-start' }}
+                    >
+                      {doc?.originalFilename || getDocumentDisplayName(row.catalogType)}
+                    </Button>
                   ) : (
                     <Typography variant="body2" color="text.secondary">
                       -
                     </Typography>
                   )}
                 </TableCell>
-              )}
-              {allowDocValidation && (
-                <TableCell align="center">
-                  <Box
-                    sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}
-                  >
-                    <Button
-                      variant="contained"
-                      size="small"
-                      onClick={() =>
-                        handleSaveDocStatus(precandidatoId, editKey, doc)
-                      }
-                      disabled={
-                        !hasFile ||
-                        !doc ||
-                        !getDocEdit(editKey, doc).status ||
-                        !isDocEditDirty(editKey, doc) ||
-                        getDocEdit(editKey, doc).saving
-                      }
-                      sx={{ textTransform: 'none' }}
-                    >
-                      {getDocEdit(editKey, doc).saving
-                        ? 'Guardando...'
-                        : 'Guardar'}
-                    </Button>
+                {allowDocActions && (
+                  <TableCell align="center">
                     <Button
                       variant="outlined"
                       size="small"
-                      onClick={() => cancelDocEdit(editKey)}
-                      disabled={
-                        !isDocEditDirty(editKey, doc) ||
-                        getDocEdit(editKey, doc).saving
-                      }
+                      color="error"
+                      startIcon={<DeleteIcon />}
+                      disabled={!hasFile || !doc}
+                      onClick={() => doc && handleDeleteDoc(precandidatoId, doc.id)}
                       sx={{ textTransform: 'none' }}
                     >
-                      Cancelar
+                      Eliminar
                     </Button>
-                  </Box>
+                  </TableCell>
+                )}
+                <TableCell align="center">
+                  {hasFile ? (
+                    <Chip
+                      label={getStatusLabel(status)}
+                      size="small"
+                      sx={{
+                        backgroundColor: getStatusColor(status).bg,
+                        color: getStatusColor(status).color,
+                        fontWeight: 500,
+                        height: 20,
+                        fontSize: '0.7rem',
+                      }}
+                    />
+                  ) : (
+                    <Chip
+                      label="Sin Cargar"
+                      size="small"
+                      sx={{
+                        backgroundColor: EMPTY_STATUS_STYLE.bg,
+                        color: EMPTY_STATUS_STYLE.color,
+                        fontWeight: 500,
+                        height: 20,
+                        fontSize: '0.7rem',
+                      }}
+                    />
+                  )}
                 </TableCell>
-              )}
-            </TableRow>
-          )
-        })}
-      </TableBody>
-    </Table>
-  )
+                {allowDocValidation && (
+                  <TableCell align="center">
+                    {hasFile && doc ? (
+                      <TextField
+                        select
+                        size="small"
+                        label="Validar"
+                        value={getDocEdit(editKey, doc).status}
+                        disabled={getDocEdit(editKey, doc).saving}
+                        onChange={(e) =>
+                          patchDocEdit(editKey, doc, {
+                            status: e.target.value as StatusEnum | '',
+                          })
+                        }
+                        sx={{ minWidth: 120 }}
+                      >
+                        <MenuItem value="">
+                          <em>Seleccionar</em>
+                        </MenuItem>
+                        <MenuItem value={StatusEnum.VALIDO}>Válido</MenuItem>
+                        <MenuItem value={StatusEnum.ERROR}>Error</MenuItem>
+                      </TextField>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    )}
+                  </TableCell>
+                )}
+                {allowDocValidation && (
+                  <TableCell>
+                    {hasFile && doc ? (
+                      <TextField
+                        size="small"
+                        fullWidth
+                        multiline
+                        maxRows={3}
+                        placeholder="Comentario..."
+                        value={getDocEdit(editKey, doc).comment}
+                        disabled={getDocEdit(editKey, doc).saving}
+                        onChange={(e) =>
+                          patchDocEdit(editKey, doc, {
+                            comment: e.target.value,
+                          })
+                        }
+                      />
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        -
+                      </Typography>
+                    )}
+                  </TableCell>
+                )}
+                {allowDocValidation && (
+                  <TableCell align="center">
+                    <Box
+                      sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}
+                    >
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={() =>
+                          handleSaveDocStatus(precandidatoId, editKey, doc)
+                        }
+                        disabled={
+                          !hasFile ||
+                          !doc ||
+                          !getDocEdit(editKey, doc).status ||
+                          !isDocEditDirty(editKey, doc) ||
+                          getDocEdit(editKey, doc).saving
+                        }
+                        sx={{ textTransform: 'none' }}
+                      >
+                        {getDocEdit(editKey, doc).saving
+                          ? 'Guardando...'
+                          : 'Guardar'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => cancelDocEdit(editKey)}
+                        disabled={
+                          !isDocEditDirty(editKey, doc) ||
+                          getDocEdit(editKey, doc).saving
+                        }
+                        sx={{ textTransform: 'none' }}
+                      >
+                        Cancelar
+                      </Button>
+                    </Box>
+                  </TableCell>
+                )}
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    )
+  }
 
   const renderDocsFallback = (
     <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
@@ -761,11 +740,11 @@ export function PrecandidatosTable({
   const renderDocsSection = (
     rows: DocumentRow[] | undefined,
     precandidatoId: number,
-    showSignColumn: boolean,
+    section: DocSection,
     claveIfe: string
   ) =>
     rows && rows.length > 0 ? (
-      renderDocsTable(rows, precandidatoId, showSignColumn, claveIfe)
+      renderDocsTable(rows, precandidatoId, section, claveIfe)
     ) : (
       renderDocsFallback
     )
@@ -775,86 +754,36 @@ export function PrecandidatosTable({
     precandidatoId: number,
     claveIfe: string
   ) => {
-    const canSign = areAllDocsValid(rows)
-    const rawDocs = rawDocsMap.get(precandidatoId)
-    const generatedMerged = generatedTypes && rawDocs ? mergeDocs(generatedTypes, rawDocs) : null
+    const validateRows = rows?.filter((row) => !isSignDocument(row.catalogType))
+    const signRows = rows?.filter((row) => isSignDocument(row.catalogType))
 
     return (
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Documentos</TableCell>
-          </TableRow>
-        </TableHead>
+      <Table size="small" sx={{ width: '100%' }}>
         <TableBody>
           <TableRow hover>
             <TableCell>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <IconButton
-                  size="small"
-                  aria-label="Expandir Documentos por validar"
-                  onClick={() => handleToggleDocRow('validate')}
-                >
-                  {expandedDocRow === 'validate' ? (
-                    <KeyboardArrowDownIcon />
-                  ) : (
-                    <KeyboardArrowRightIcon />
-                  )}
-                </IconButton>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  Documentos por validar
-                </Typography>
-              </Box>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                Archivos para subir
+              </Typography>
             </TableCell>
           </TableRow>
-          {expandedDocRow === 'validate' && (
-            <TableRow>
-              <TableCell sx={{ pl: 6 }}>
-                {renderDocsSection(rows, precandidatoId, false, claveIfe)}
-              </TableCell>
-            </TableRow>
-          )}
+          <TableRow>
+            <TableCell sx={{ pl: 6 }}>
+              {renderDocsSection(validateRows, precandidatoId, 'validate', claveIfe)}
+            </TableCell>
+          </TableRow>
           <TableRow hover>
             <TableCell>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <IconButton
-                  size="small"
-                  aria-label="Expandir Documentos por firmar y validar"
-                  disabled={!canSign}
-                  onClick={() => handleToggleDocRow('sign')}
-                >
-                  {expandedDocRow === 'sign' ? (
-                    <KeyboardArrowDownIcon />
-                  ) : (
-                    <KeyboardArrowRightIcon />
-                  )}
-                </IconButton>
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: 500, color: canSign ? 'text.primary' : 'text.disabled' }}
-                >
-                  Documentos por firmar y validar
-                </Typography>
-              </Box>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                Documentos por firmar y validar
+              </Typography>
             </TableCell>
           </TableRow>
-          {expandedDocRow === 'sign' && canSign && (
-            <TableRow>
-              <TableCell sx={{ pl: 6 }}>
-                {generatedTypesError ? (
-                  <Alert severity="warning" sx={{ mt: 1 }}>
-                    No se pudieron cargar los tipos de documento generados
-                  </Alert>
-                ) : generatedMerged === null ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                    <CircularProgress size={20} />
-                  </Box>
-                ) : (
-                  renderDocsSection(generatedMerged, precandidatoId, true, claveIfe)
-                )}
-              </TableCell>
-            </TableRow>
-          )}
+          <TableRow>
+            <TableCell sx={{ pl: 6 }}>
+              {renderDocsSection(signRows, precandidatoId, 'sign', claveIfe)}
+            </TableCell>
+          </TableRow>
         </TableBody>
       </Table>
     )
@@ -978,9 +907,9 @@ export function PrecandidatosTable({
                   {isExpanded && (
                     <TableRow key={`${precandidatoId}-expanded`}>
                       <TableCell colSpan={totalColumns} sx={{ p: 0, backgroundColor: '#f5f5f5' }}>
-                        {/* Sin scroll interno en la tabla: el contenido expandido crece
-                            hasta 60vh y ahi hace scroll (unico scroll) */}
-                        <Box sx={{ py: 1, pl: 4, pr: 2, maxHeight: '60vh', overflowY: 'auto' }}>
+                        {/* Sin altura maxima: el contenido expandido crece lo necesario
+                            y el unico scroll es el general de la pagina */}
+                        <Box sx={{ py: 1, pl: 4, pr: 2 }}>
                           {isLoadingDocs ? (
                             <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
                               <CircularProgress size={20} />
@@ -992,7 +921,7 @@ export function PrecandidatosTable({
                           ) : groupDocuments ? (
                             renderDocumentsGroup(merged, precandidatoId, p.claveIfe)
                           ) : (
-                            renderDocsSection(merged, precandidatoId, false, p.claveIfe)
+                            renderDocsSection(merged, precandidatoId, 'legacy', p.claveIfe)
                           )}
                         </Box>
                       </TableCell>

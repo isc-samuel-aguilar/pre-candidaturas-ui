@@ -33,6 +33,18 @@ export const GENERATABLE_DOCUMENT_TYPES: Record<string, string> = {
   'FORMATO DECL PATRI': 'FORMATO_DE_DECLARACION_APP',
 }
 
+// Nombres visibles de los tipos DOCUMENT_TYPE que se generan/firman.
+// El valor crudo del catalogo ('CV PUB') sigue siendo el que viaja en la API.
+export const DOCUMENT_DISPLAY_NAMES: Record<string, string> = {
+  'FORMATO DECL PATRI': 'FORMATO DE DECLARACION APP.pdf',
+  'CV PRIV': 'CV PRIVADO APP.pdf',
+  'CV PUB': 'CV PUBLICO APP.pdf',
+}
+
+export function getDocumentDisplayName(catalogValue: string): string {
+  return DOCUMENT_DISPLAY_NAMES[catalogValue] ?? catalogValue
+}
+
 const DOCUMENT_TYPE_CACHE_KEY = 'document_type_cache'
 const GENERATED_DOCUMENT_CACHE_KEY = 'generated_document_type_cache'
 const DEMARCATION_DOCUMENT_CACHE_KEY = 'demarcation_document_type_cache'

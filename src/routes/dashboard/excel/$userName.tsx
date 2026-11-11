@@ -25,8 +25,11 @@ function ExcelValidationPage() {
     folio,
     demarcaciones,
     loading,
+    uploadingIds,
     error,
     fetchData,
+    handleUpload,
+    handleDelete,
     updateStatus,
     getStatusColor,
   } = useDemarcaciones({ userName })
@@ -78,6 +81,50 @@ function ExcelValidationPage() {
     setSnackbar((prev) => ({ ...prev, open: false }))
   }, [])
 
+  // Sólo los usa ADMIN (columnas Excel/Eliminar de la vista de validación;
+  // VALIDATOR no las ve porque showUploadCols es false)
+  const handleUploadWithFeedback = useCallback(
+    async (demarcacion: DemarcacionRow, file: File) => {
+      try {
+        await handleUpload(demarcacion.catalogo, file)
+        setSnackbar({
+          open: true,
+          message: `Archivo cargado exitosamente para ${
+            demarcacion.catalogo.alias || demarcacion.catalogo.demarcacion
+          }`,
+          severity: 'success',
+        })
+      } catch (err) {
+        setSnackbar({
+          open: true,
+          message: (err as { message?: string }).message || 'Error al cargar el archivo',
+          severity: 'error',
+        })
+      }
+    },
+    [handleUpload]
+  )
+
+  const handleDeleteWithFeedback = useCallback(
+    async (folioDemarcacionId: number) => {
+      try {
+        await handleDelete(folioDemarcacionId)
+        setSnackbar({
+          open: true,
+          message: 'Demarcación eliminada correctamente',
+          severity: 'success',
+        })
+      } catch (err) {
+        setSnackbar({
+          open: true,
+          message: (err as { message?: string }).message || 'Error al eliminar la demarcación',
+          severity: 'error',
+        })
+      }
+    },
+    [handleDelete]
+  )
+
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
@@ -98,9 +145,9 @@ function ExcelValidationPage() {
       <DemarcacionTable
         demarcaciones={demarcaciones}
         loading={loading}
-        uploadingIds={new Set<number>()}
-        onUpload={async () => {}}
-        onDelete={async () => {}}
+        uploadingIds={uploadingIds}
+        onUpload={handleUploadWithFeedback}
+        onDelete={handleDeleteWithFeedback}
         getStatusColor={getStatusColor}
         mode="validate"
         onSaveStatus={handleSaveStatus}
