@@ -467,7 +467,7 @@ export function PrecandidatosTable({
   ) => {
     const showSignColumn = section === 'sign'
     // Las 2 secciones agrupadas comparten el grid de columnas: en "Archivos para subir"
-    // la celda Tipo cubre Tipo + Descargar para firmar (colSpan=2) para alinear el resto
+    // la celda Tipo cubre Tipo + Descargar y/o Firmar (colSpan=2) para alinear el resto
     const tipoColSpan = section === 'validate' ? 2 : 1
     const weights = getDocColumnWeights(section)
     const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
@@ -486,7 +486,7 @@ export function PrecandidatosTable({
           <TableRow>
             <TableCell colSpan={tipoColSpan}>Tipo</TableCell>
             {showSignColumn && (
-              <TableCell align="center">Descargar para firmar</TableCell>
+              <TableCell align="center">Descargar y/o Firmar</TableCell>
             )}
             {allowDocActions && <TableCell align="center">Subir</TableCell>}
             <TableCell>Nombre</TableCell>
@@ -535,7 +535,7 @@ export function PrecandidatosTable({
                         startIcon={isDownloading ? <CircularProgress size={14} /> : undefined}
                         sx={{ textTransform: 'none' }}
                       >
-                        Descargar y firmar
+                        Descargar
                       </Button>
                     ) : (
                       <Typography variant="body2" color="text.secondary">

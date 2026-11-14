@@ -446,7 +446,7 @@ describe('PrecandidatosTable - agrupación Documentos', () => {
     expect(screen.getByText('Documentos por firmar y validar')).toBeInTheDocument()
     expect(await screen.findAllByRole('columnheader', { name: 'Tipo' })).toHaveLength(2)
     expect(
-      await screen.findByRole('columnheader', { name: 'Descargar para firmar' })
+      await screen.findByRole('columnheader', { name: 'Descargar y/o Firmar' })
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /^Expandir Documentos/ })
@@ -474,9 +474,9 @@ describe('PrecandidatosTable - agrupación Documentos', () => {
   it('shows the sign section even when no document is VALIDO', async () => {
     await renderGroupedAndExpand({ allowDocActions: false, allowDocValidation: true })
 
-    expect(await screen.findAllByRole('button', { name: 'Descargar y firmar' })).toHaveLength(3)
+    expect(await screen.findAllByRole('button', { name: 'Descargar' })).toHaveLength(3)
     expect(
-      await screen.findByRole('columnheader', { name: 'Descargar para firmar' })
+      await screen.findByRole('columnheader', { name: 'Descargar y/o Firmar' })
     ).toBeInTheDocument()
   })
 
@@ -500,7 +500,7 @@ describe('PrecandidatosTable - agrupación Documentos', () => {
 
   async function getSectionTables() {
     const signHeader = await screen.findByRole('columnheader', {
-      name: 'Descargar para firmar',
+      name: 'Descargar y/o Firmar',
     })
     const signTable = signHeader.closest('table')
     const tipoHeaders = screen.getAllByRole('columnheader', { name: 'Tipo' })
@@ -540,7 +540,7 @@ describe('PrecandidatosTable - agrupación Documentos', () => {
     ])
     expect(headerNames(signTable).slice(0, 6)).toEqual([
       'Tipo',
-      'Descargar para firmar',
+      'Descargar y/o Firmar',
       'Subir',
       'Nombre',
       'Eliminar',
@@ -548,7 +548,7 @@ describe('PrecandidatosTable - agrupación Documentos', () => {
     ])
   })
 
-  it('spans the validate Tipo cell over the Tipo and Descargar para firmar columns', async () => {
+  it('spans the validate Tipo cell over the Tipo and Descargar y/o Firmar columns', async () => {
     await renderGroupedAndExpand({ allowDocActions: true, allowDocValidation: false })
 
     const { signTable, validateTable } = await getSectionTables()
@@ -732,12 +732,12 @@ describe('PrecandidatosTable - secciones de documentos visibles por defecto', ()
 
     expect(await screen.findAllByRole('columnheader', { name: 'Tipo' })).toHaveLength(2)
     expect(
-      await screen.findAllByRole('button', { name: 'Descargar y firmar' })
+      await screen.findAllByRole('button', { name: 'Descargar' })
     ).toHaveLength(3)
   })
 })
 
-describe('PrecandidatosTable - columna Descargar para firmar', () => {
+describe('PrecandidatosTable - columna Descargar y/o Firmar', () => {
   const SIGN_ROWS: Array<[string, string]> = [
     ['FORMATO DE DECLARACION APP.pdf', 'FORMATO_DE_DECLARACION_APP'],
     ['CV PRIVADO APP.pdf', 'CV_PRIVADO_APP'],
@@ -775,7 +775,7 @@ describe('PrecandidatosTable - columna Descargar para firmar', () => {
     fireEvent.click(expandButton)
 
     await waitFor(() => expect(mocks.getDocumentsByPrecandidato).toHaveBeenCalled())
-    await screen.findByRole('columnheader', { name: 'Descargar para firmar' })
+    await screen.findByRole('columnheader', { name: 'Descargar y/o Firmar' })
   }
 
   function getRowFor(displayName: string): HTMLElement {
@@ -785,7 +785,7 @@ describe('PrecandidatosTable - columna Descargar para firmar', () => {
   }
 
   function getSignButton(displayName: string): HTMLElement {
-    return within(getRowFor(displayName)).getByRole('button', { name: 'Descargar y firmar' })
+    return within(getRowFor(displayName)).getByRole('button', { name: 'Descargar' })
   }
 
   it('never renders a Generar header or button', async () => {
@@ -795,13 +795,13 @@ describe('PrecandidatosTable - columna Descargar para firmar', () => {
     expect(screen.queryAllByRole('button', { name: 'Generar' })).toHaveLength(0)
   })
 
-  it('renders the Descargar para firmar column once, only in the sign section', async () => {
+  it('renders the Descargar y/o Firmar column once, only in the sign section', async () => {
     await renderGroupedAndExpandPrecandidato()
 
     expect(
-      screen.getAllByRole('columnheader', { name: 'Descargar para firmar' })
+      screen.getAllByRole('columnheader', { name: 'Descargar y/o Firmar' })
     ).toHaveLength(1)
-    expect(screen.getAllByRole('button', { name: 'Descargar y firmar' })).toHaveLength(3)
+    expect(screen.getAllByRole('button', { name: 'Descargar' })).toHaveLength(3)
   })
 
   it('does not render the sign button on the INE/ACTA/FOTO rows', async () => {
@@ -809,7 +809,7 @@ describe('PrecandidatosTable - columna Descargar para firmar', () => {
 
     for (const type of ['INE', 'ACTA', 'FOTO']) {
       expect(
-        within(getRowFor(type)).queryByRole('button', { name: 'Descargar y firmar' })
+        within(getRowFor(type)).queryByRole('button', { name: 'Descargar' })
       ).not.toBeInTheDocument()
     }
   })

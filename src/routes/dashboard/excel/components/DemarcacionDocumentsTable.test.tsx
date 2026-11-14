@@ -149,11 +149,15 @@ describe('DemarcacionDocumentsTable - fusión catálogo + documentos reales', ()
     expect(within(table).getAllByRole('row')).toHaveLength(4)
     expect(within(table).getByText('FORMATO UNICO DE REGISTRO (FUR) APP.pdf')).toBeInTheDocument()
     expect(within(table).getByText('PROYECTO DE TRABAJO')).toBeInTheDocument()
-    // Tipo es link con el nombre del catálogo; Generar muestra botón "Descargar"
+    // Tipo es link con el nombre del catálogo; la columna "Descargar y/o Firmar"
+    // muestra "Descargar" en PROYECTO y ACUSE y "Descargar y firmar" en el FUR
     expect(
       within(table).getAllByText('ACUSE_DE_DOCUMENTOS.pdf')
     ).toHaveLength(1)
-    expect(within(table).getByRole('button', { name: 'Descargar' })).toBeInTheDocument()
+    expect(within(table).getAllByRole('button', { name: 'Descargar' })).toHaveLength(2)
+    expect(
+      within(table).getByRole('button', { name: 'Descargar y firmar' })
+    ).toBeInTheDocument()
     expect(within(table).getByRole('button', { name: 'fur-app.pdf' })).toBeInTheDocument()
     expect(within(table).getByRole('button', { name: 'proyecto.docx' })).toBeInTheDocument()
   })
@@ -173,7 +177,7 @@ describe('DemarcacionDocumentsTable - fusión catálogo + documentos reales', ()
     expect(within(table).getByText('Por Validar')).toBeInTheDocument()
   })
 
-  it('shows upload headers plus Generar in upload mode', async () => {
+  it('shows upload headers with the download/sign column after Tipo', async () => {
     renderTable({ mode: 'upload' })
 
     const table = await screen.findByTestId('demarcacion-documents-table')
@@ -181,10 +185,17 @@ describe('DemarcacionDocumentsTable - fusión catálogo + documentos reales', ()
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent)
 
-    expect(headers).toEqual(['Tipo', 'Nombre', 'Subir', 'Eliminar', 'Status', 'Generar'])
+    expect(headers).toEqual([
+      'Tipo',
+      'Descargar y/o Firmar',
+      'Nombre',
+      'Subir',
+      'Eliminar',
+      'Status',
+    ])
   })
 
-  it('shows validation headers plus Generar in validate mode', async () => {
+  it('shows validation headers with the download/sign column after Tipo', async () => {
     renderTable({ mode: 'validate' })
 
     const table = await screen.findByTestId('demarcacion-documents-table')
@@ -194,12 +205,12 @@ describe('DemarcacionDocumentsTable - fusión catálogo + documentos reales', ()
 
     expect(headers).toEqual([
       'Tipo',
+      'Descargar y/o Firmar',
       'Nombre',
       'Status',
       'Validar',
       'Comentario',
       'Acciones',
-      'Generar',
     ])
   })
 })
@@ -215,12 +226,12 @@ describe('DemarcacionDocumentsTable - acciones por rol', () => {
     const table = await screen.findByTestId('demarcacion-documents-table')
     const uploadButtons = within(table).getAllByRole('button', { name: 'Subir' })
     const deleteButtons = within(table).getAllByRole('button', { name: 'Eliminar' })
-    const generateButtons = within(table).getAllByRole('button', { name: 'Generar' })
+    const generateButtons = within(table).getAllByRole('button', { name: 'Descargar y firmar' })
 
     uploadButtons.forEach((button) => expect(button).toBeEnabled())
     // no persisted document → Eliminar deshabilitado
     deleteButtons.forEach((button) => expect(button).toBeDisabled())
-    // Generar only on the FUR row
+    // "Descargar y firmar" only on the FUR row
     expect(generateButtons).toHaveLength(1)
     generateButtons.forEach((button) => expect(button).toBeEnabled())
   })
@@ -243,11 +254,11 @@ describe('DemarcacionDocumentsTable - acciones por rol', () => {
     renderTable({ role: 'VALIDATOR', mode: 'validate', existingDocs: [furDocument] })
 
     const table = await screen.findByTestId('demarcacion-documents-table')
-    const generateButtons = within(table).getAllByRole('button', { name: 'Generar' })
+    const generateButtons = within(table).getAllByRole('button', { name: 'Descargar y firmar' })
     const saveButtons = within(table).getAllByRole('button', { name: 'Guardar' })
     const cancelButtons = within(table).getAllByRole('button', { name: 'Cancelar' })
 
-    // VALIDATOR has no Subir/Eliminar columns in validate mode; Generar enabled
+    // VALIDATOR has no Subir/Eliminar columns in validate mode; "Descargar y firmar" enabled
     expect(generateButtons).toHaveLength(1)
     expect(generateButtons[0]).toBeEnabled()
     // save starts disabled until dirty
@@ -273,7 +284,7 @@ describe('DemarcacionDocumentsTable - acciones por rol', () => {
     const table = await screen.findByTestId('demarcacion-documents-table')
     const uploadButtons = within(table).getAllByRole('button', { name: 'Subir' })
     const deleteButtons = within(table).getAllByRole('button', { name: 'Eliminar' })
-    const generateButtons = within(table).getAllByRole('button', { name: 'Generar' })
+    const generateButtons = within(table).getAllByRole('button', { name: 'Descargar y firmar' })
 
     uploadButtons.forEach((button) => expect(button).toBeEnabled())
     deleteButtons.forEach((button) => expect(button).toBeDisabled())
@@ -332,7 +343,7 @@ describe('DemarcacionDocumentsTable - gate de status de la demarcación', () => 
     })
 
     const table = await screen.findByTestId('demarcacion-documents-table')
-    const generateButtons = within(table).queryAllByRole('button', { name: 'Generar' })
+    const generateButtons = within(table).queryAllByRole('button', { name: 'Descargar y firmar' })
     expect(generateButtons).toHaveLength(0)
     // Tipo on the FUR row is plain text too (no generate without a valid demarcation)
     const tipoText = within(table).getByText('FORMATO UNICO DE REGISTRO (FUR) APP.pdf')
@@ -349,7 +360,7 @@ describe('DemarcacionDocumentsTable - generación y descarga', () => {
     renderTable({ role: 'ADMIN', existingDocs: [] })
 
     const table = await screen.findByTestId('demarcacion-documents-table')
-    const generateButton = within(table).getByRole('button', { name: 'Generar' })
+    const generateButton = within(table).getByRole('button', { name: 'Descargar y firmar' })
     fireEvent.click(generateButton)
 
     await waitFor(() => {
@@ -374,7 +385,7 @@ describe('DemarcacionDocumentsTable - generación y descarga', () => {
     renderTable({ role: 'ADMIN', existingDocs: [] })
 
     const table = await screen.findByTestId('demarcacion-documents-table')
-    const generateButton = within(table).getByRole('button', { name: 'Generar' })
+    const generateButton = within(table).getByRole('button', { name: 'Descargar y firmar' })
     fireEvent.click(generateButton)
 
     await waitFor(() => {
@@ -455,6 +466,29 @@ describe('DemarcacionDocumentsTable - generación y descarga', () => {
     })
   })
 
+  it('downloads the uploaded work project file from the Descargar y/o Firmar column', async () => {
+    renderTable({ role: 'ADMIN', existingDocs: [proyDocument] })
+
+    const table = await screen.findByTestId('demarcacion-documents-table')
+    const rows = within(table).getAllByRole('row')
+    const proyRow = rows.find(
+      (row) => within(row).queryAllByText('PROYECTO DE TRABAJO').length > 0
+    )
+    if (!proyRow) throw new Error('Proyecto row not found')
+
+    fireEvent.click(within(proyRow).getByRole('button', { name: 'Descargar' }))
+
+    await waitFor(() => {
+      expect(mocks.downloadDemarcationDocumentFile).toHaveBeenCalledWith(
+        5,
+        10,
+        proyDocument,
+        'token123'
+      )
+    })
+    expect(mocks.generateDemarcationDocument).not.toHaveBeenCalled()
+  })
+
   it('deletes a persisted document', async () => {
     renderTable({ role: 'ADMIN', existingDocs: [furDocument, proyDocument] })
 
@@ -479,8 +513,8 @@ describe('DemarcacionDocumentsTable - C13: filas PROYECTO DE TRABAJO y ACUSE', (
 
     const table = await screen.findByTestId('demarcacion-documents-table')
 
-    // Generar solo en la fila FUR (PROY y ACUSE no generan)
-    const generateButtons = within(table).getAllByRole('button', { name: 'Generar' })
+    // "Descargar y firmar" solo en la fila FUR (PROY y ACUSE no generan)
+    const generateButtons = within(table).getAllByRole('button', { name: 'Descargar y firmar' })
     expect(generateButtons).toHaveLength(1)
 
     // 2 inputs de archivo (FUR + PROY); el ACUSE no ofrece upload
@@ -529,7 +563,7 @@ describe('DemarcacionDocumentsTable - C13: filas PROYECTO DE TRABAJO y ACUSE', (
       name: 'ACUSE_DE_DOCUMENTOS.pdf',
     })
 
-    // Generar es botón outlined "Descargar" (mismo formato que el FUR)
+    // "Descargar y/o Firmar" es botón outlined "Descargar" (mismo formato que el FUR)
     const downloadButton = within(acuseRow).getByRole('button', { name: 'Descargar' })
     expect(downloadButton.className).toContain('MuiButton-outlined')
     expect(
@@ -578,8 +612,8 @@ describe('DemarcacionDocumentsTable - C13: filas PROYECTO DE TRABAJO y ACUSE', (
     const downloadButton = within(acuseRow).getByRole('button', { name: 'Descargar' })
     expect(downloadButton).toBeEnabled()
 
-    // la demarcación no válida sí oculta Generar del FUR
-    expect(within(table).queryByRole('button', { name: 'Generar' })).toBeNull()
+    // la demarcación no válida sí oculta "Descargar y firmar" del FUR
+    expect(within(table).queryByRole('button', { name: 'Descargar y firmar' })).toBeNull()
 
     fireEvent.click(downloadButton)
 

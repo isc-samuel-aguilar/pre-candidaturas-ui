@@ -422,19 +422,19 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     const deleteButtons = within(documentsTable).getAllByRole('button', {
       name: 'Eliminar',
     })
-    const generateButtons = within(documentsTable).getAllByRole('button', { name: 'Generar' })
+    const generateButtons = within(documentsTable).getAllByRole('button', { name: 'Descargar y firmar' })
 
     expect(uploadButtons).toHaveLength(2)
     expect(deleteButtons).toHaveLength(2)
     // C12: ADMIN + VALIDA → Subir habilitado; Eliminar deshabilitado sin archivo
     uploadButtons.forEach((button) => expect(button).toBeEnabled())
     deleteButtons.forEach((button) => expect(button).toBeDisabled())
-    // Generar solo en la fila FUR
+    // "Descargar y firmar" solo en la fila FUR
     expect(generateButtons).toHaveLength(1)
     expect(generateButtons[0]).toBeEnabled()
   })
 
-  it('renders the columns of the FUR table in upload mode with Generar (C12)', async () => {
+  it('renders the columns of the FUR table in upload mode with Descargar y/o Firmar (C12)', async () => {
     renderTable([registeredRow])
 
     expandFirstRow()
@@ -445,10 +445,17 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent)
 
-    expect(headers).toEqual(['Tipo', 'Nombre', 'Subir', 'Eliminar', 'Status', 'Generar'])
+    expect(headers).toEqual([
+      'Tipo',
+      'Descargar y/o Firmar',
+      'Nombre',
+      'Subir',
+      'Eliminar',
+      'Status',
+    ])
   })
 
-  it('renders the validation columns with Generar in the FUR table in validate mode', async () => {
+  it('renders the validation columns in the FUR table in validate mode', async () => {
     renderTable([registeredRow], 'validate')
 
     expandFirstRow()
@@ -461,12 +468,12 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
 
     expect(headers).toEqual([
       'Tipo',
+      'Descargar y/o Firmar',
       'Nombre',
       'Status',
       'Validar',
       'Comentario',
       'Acciones',
-      'Generar',
     ])
     const saveButtons = within(documentsTable).getAllByRole('button', {
       name: 'Guardar',

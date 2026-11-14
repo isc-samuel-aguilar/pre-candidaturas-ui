@@ -5,6 +5,7 @@ import {
   TextField, Typography,
 } from '@mui/material'
 import { revealCredential } from '../../../services/credentialService'
+import { getFolios } from '../../../services/folioService'
 import {
   administrativeRoles, createUser, deleteUser, listUsers, updateUser,
   type ManagedUser, type UserFields,
@@ -73,6 +74,7 @@ function errorMessage(error: unknown, fallback: string): string {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<ManagedUser[]>([])
+  const [folioByUser, setFolioByUser] = useState<Map<number, string>>(new Map())
   const [creation, setCreation] = useState(emptyFields)
   const [editing, setEditing] = useState<{ user: ManagedUser; values: UserFields }>()
   const [deleting, setDeleting] = useState<ManagedUser>()
@@ -83,8 +85,16 @@ export default function UsersPage() {
 
   useEffect(() => {
     let active = true
-    listUsers()
-      .then((result) => { if (active) setUsers(result) })
+    void Promise.all([
+      listUsers(),
+      // si GET /folios falla, la tabla se muestra igual con "—" en la columna Folio
+      getFolios().catch(() => []),
+    ])
+      .then(([result, folios]) => {
+        if (!active) return
+        setUsers(result)
+        setFolioByUser(new Map(folios.map((folio) => [folio.userId, folio.folio])))
+      })
       .catch((cause: unknown) => { if (active) setError(errorMessage(cause, 'No se pudo cargar la lista de usuarios.')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -155,6 +165,7 @@ export default function UsersPage() {
           <Table size="small" aria-label="Usuarios existentes">
             <TableHead>
               <TableRow>
+                <TableCell>Folio</TableCell>
                 {fields.map((field) => <TableCell key={field.name}>{field.label}</TableCell>)}
                 <TableCell>Estado</TableCell>
                 <TableCell>Acciones</TableCell>
@@ -163,6 +174,7 @@ export default function UsersPage() {
             <TableBody>
               {users.map((user) => (
                 <TableRow key={user.id}>
+                  <TableCell>{folioByUser.get(user.id) ?? '—'}</TableCell>
                   {fields.map((field) => (
                     <TableCell key={field.name} sx={{ minWidth: editing?.user.id === user.id ? 145 : undefined }}>
                       {editing?.user.id === user.id ? (
@@ -195,7 +207,7 @@ export default function UsersPage() {
               ))}
               {users.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={fields.length + 2}>{loading ? 'Cargando usuarios…' : 'Sin usuarios para mostrar.'}</TableCell>
+                  <TableCell colSpan={fields.length + 3}>{loading ? 'Cargando usuarios…' : 'Sin usuarios para mostrar.'}</TableCell>
                 </TableRow>
               )}
             </TableBody>

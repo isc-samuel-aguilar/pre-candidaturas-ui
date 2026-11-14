@@ -21,4 +21,8 @@ describe('NAV_ITEMS', () => {
       expect.objectContaining({ label: 'Configurar', roles: ['ADMIN'] })
     )
   })
+
+  it('no incluye el ítem Consultar', () => {
+    expect(NAV_ITEMS.find((navItem) => navItem.label === 'Consultar')).toBeUndefined()
+  })
 })

@@ -22,7 +22,6 @@ test.describe('Login (P11)', () => {
     await expect(page).toHaveURL(/\/dashboard\/folios/)
     await expect(page.getByRole('heading', { name: 'Captura de Folio', level: 5 })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Cerrar Sesión' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Consultar' })).toBeVisible()
     await expect(page.getByRole('banner').getByText('admin', { exact: true })).toBeVisible()
   })
 

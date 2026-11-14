@@ -458,6 +458,7 @@ export function DemarcacionDocumentsTable({
         <TableHead>
           <TableRow>
             <TableCell>Tipo</TableCell>
+            <TableCell align="center">Descargar y/o Firmar</TableCell>
             <TableCell>Nombre</TableCell>
             {!isValidateMode && <TableCell align="center">Subir</TableCell>}
             {!isValidateMode && <TableCell align="center">Eliminar</TableCell>}
@@ -465,7 +466,6 @@ export function DemarcacionDocumentsTable({
             {isValidateMode && <TableCell align="center">Validar</TableCell>}
             {isValidateMode && <TableCell>Comentario</TableCell>}
             {isValidateMode && <TableCell align="center">Acciones</TableCell>}
-            <TableCell align="center">Generar</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -553,6 +553,52 @@ export function DemarcacionDocumentsTable({
                   ) : (
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>
                       {row.catalogType}
+                    </Typography>
+                  )}
+                </TableCell>
+                <TableCell align="center">
+                  {isAcuse ? (
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={handleDownloadAcuse}
+                      disabled={isDownloading}
+                      startIcon={
+                        isDownloading ? <CircularProgress size={14} /> : undefined
+                      }
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Descargar
+                    </Button>
+                  ) : showGenerar && allowGenerate ? (
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => handleGenerate(row.catalogType)}
+                      disabled={isGenerating}
+                      startIcon={
+                        isGenerating ? <CircularProgress size={14} /> : undefined
+                      }
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Descargar y firmar
+                    </Button>
+                  ) : isWorkProjectRow(row.catalogType) && hasFile && doc ? (
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => handleDownloadFile(row.catalogType, doc)}
+                      disabled={isDownloading}
+                      startIcon={
+                        isDownloading ? <CircularProgress size={14} /> : undefined
+                      }
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Descargar
+                    </Button>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      -
                     </Typography>
                   )}
                 </TableCell>
@@ -759,39 +805,6 @@ export function DemarcacionDocumentsTable({
                     )}
                   </TableCell>
                 )}
-                <TableCell align="center">
-                  {isAcuse ? (
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={handleDownloadAcuse}
-                      disabled={isDownloading}
-                      startIcon={
-                        isDownloading ? <CircularProgress size={14} /> : undefined
-                      }
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Descargar
-                    </Button>
-                  ) : showGenerar && allowGenerate ? (
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={() => handleGenerate(row.catalogType)}
-                      disabled={isGenerating}
-                      startIcon={
-                        isGenerating ? <CircularProgress size={14} /> : undefined
-                      }
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Generar
-                    </Button>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      -
-                    </Typography>
-                  )}
-                </TableCell>
               </TableRow>
             )
           })}

@@ -40,16 +40,50 @@ El proyecto utiliza archivos de entorno para configuracion por ambiente:
 | Archivo | Descripcion |
 |---------|-------------|
 | `env-local.env` | Configuracion local (default) |
-| `env-dev.env` | Ambiente de desarrollo |
-| `env-qa.env` | Ambiente de testing |
-| `env-main.env` | Ambiente de produccion |
+| `.env.dev` | Ambiente de desarrollo |
+| `.env.qa` | Ambiente de testing |
+| `.env.main` | Ambiente de produccion |
 
 ### Variables disponibles
 
 ```env
 VITE_API_URL=http://localhost:9002/api/v1
 VITE_AUTH_URL=http://localhost:9001/api/v1/auth
+
+# Carpeta con los Excel de ejemplo/limpios. Absoluta o relativa al directorio
+# desde donde se ejecuta el UI (default: ../demo_files).
+DEMO_FILES_DIR=../demo_files
 ```
+
+## Archivos demo (seccion "Ejemplos de archivos")
+
+La seccion `Ejemplos de archivos` de `/dashboard/excel` descarga los Excel desde
+`DEMO_FILES_DIR` mediante rutas relativas al mismo origen: `/demo-files/<nombre>`.
+
+- **Desarrollo** (`pnpm dev`): el plugin `server/demoFilesPlugin.ts` sirve
+  `/demo-files/*` leyendo `DEMO_FILES_DIR`. Tambien funciona con `pnpm preview`.
+- **Produccion (EC2)**: solo se copia `dist/`; Vite no se ejecuta alli. Caddy debe
+  servir `/demo-files/*` desde la carpeta de los Excel. Ejemplo de Caddyfile:
+
+```caddyfile
+example.com {
+    handle /demo-files/* {
+        uri strip_prefix /demo-files
+        root * /ruta/absoluta/a/demo_files
+        file_server
+    }
+
+    handle {
+        root * /ruta/absoluta/a/dist
+        try_files {path} /index.html
+        file_server
+    }
+}
+```
+
+Solo se sirven los nombres de archivo declarados en el catalogo
+(`src/services/demoFilesCatalog.ts`); cualquier otro nombre o intento de salir de
+la carpeta responde 404. La UI valida la sesion con `GET /me` antes de descargar.
 
 ## Levantar el Proyecto
 

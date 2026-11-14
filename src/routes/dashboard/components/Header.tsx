@@ -23,11 +23,12 @@ export function Header({ navItems, user, onLogout, isDarkMode, onToggleTheme }: 
 
   return (
     <AppBar position="static">
-      <Toolbar>
-        <Typography variant="h6" component="div" sx={{ flexGrow: 0, mr: 4 }}>
-          Precandidaturas
+      <Toolbar sx={{ justifyContent: 'center' }}>
+        <Typography variant="h6" component="div">
+          Sistema de registro en línea de precandidaturas
         </Typography>
-
+      </Toolbar>
+      <Toolbar>
         <Box sx={{ display: 'flex', gap: 1, flexGrow: 1 }}>
           {visibleItems.map((item) => (
             <Button
