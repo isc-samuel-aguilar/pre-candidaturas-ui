@@ -1,15 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Box,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Typography,
   Button,
   Alert,
   CircularProgress,
 } from '@mui/material'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import { encryptCredential } from '../../../../services/credentialService'
 import { RepresentationSection } from './RepresentationSection'
 import { FolioInfoSection } from './FolioInfoSection'
 import { UserInfoSection } from './UserInfoSection'
@@ -28,8 +25,6 @@ interface RepresentationData {
 
 interface FolioFormData {
   folio: string
-  email: string
-  telefono: string
   calle: string
   numero: string
   colonia: string
@@ -74,8 +69,6 @@ function createEmptyRepresentations(configs: KeyValueCatalog[]): RepresentationD
 function createEmptyFormData(): FolioFormData {
   return {
     folio: '',
-    email: '',
-    telefono: '',
     calle: '',
     numero: '',
     colonia: '',
@@ -100,8 +93,6 @@ function createEmptyUserData(): UserData {
 function mapFolioToFormData(folio: Folio): FolioFormData {
   return {
     folio: folio.folio,
-    email: folio.email,
-    telefono: folio.telefono ?? '',
     calle: folio.calle,
     numero: folio.numero,
     colonia: folio.colonia,
@@ -143,22 +134,23 @@ export function FolioForm({
   const [userData, setUserData] = useState<UserData>(createEmptyUserData)
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
 
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
   const isEditing = editingFolio !== null
 
   useEffect(() => {
     if (editingFolio) {
       setFolioData(mapFolioToFormData(editingFolio))
       setRepresentationsData(mapFolioToRepresentations(editingFolio, representations))
-      const fullUsername = editingFolio.user?.username ?? ''
-      const usuarioSuffix = fullUsername.replace(editingFolio.folio, '')
       setUserData({
-        username: usuarioSuffix,
+        username: editingFolio.user?.username ?? '',
         password: '',
         name: '',
         lastName: '',
         motherLastName: '',
-        email: '',
-        phone: '',
+        email: editingFolio.user?.email ?? editingFolio.email,
+        phone: editingFolio.user?.phone ?? editingFolio.telefono ?? '',
       })
     } else {
       setFolioData({ ...createEmptyFormData(), folio: defaultFolio })
@@ -172,8 +164,6 @@ export function FolioForm({
     if (dummyDataToFill) {
       setFolioData({
         folio: dummyDataToFill.folio,
-        email: dummyDataToFill.email,
-        telefono: dummyDataToFill.user.phone,
         calle: dummyDataToFill.calle,
         numero: dummyDataToFill.numero,
         colonia: dummyDataToFill.colonia,
@@ -244,9 +234,10 @@ export function FolioForm({
     const errors: Record<string, string> = {}
 
     if (!folioData.folio.trim()) errors.folio = 'El folio es requerido'
-    if (!folioData.email.trim()) errors.email = 'El correo es requerido'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(folioData.email))
+    if (!userData.email.trim()) errors.email = 'El correo es requerido'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email))
       errors.email = 'Correo electrónico inválido'
+    if (!userData.phone.trim()) errors.phone = 'El teléfono es requerido'
     if (!folioData.calle.trim()) errors.calle = 'La calle es requerida'
     if (!folioData.numero.trim()) errors.numero = 'El número es requerido'
     if (!folioData.colonia.trim()) errors.colonia = 'La colonia es requerida'
@@ -272,10 +263,6 @@ export function FolioForm({
         errors.password = 'La contraseña debe tener al menos 8 caracteres'
       if (!userData.name.trim()) errors.name = 'El nombre es requerido'
       if (!userData.lastName.trim()) errors.lastName = 'El apellido paterno es requerido'
-      if (!userData.email.trim()) errors.userEmail = 'El correo es requerido'
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email))
-        errors.userEmail = 'Correo electrónico inválido'
-      if (!userData.phone.trim()) errors.phone = 'El teléfono es requerido'
     }
 
     setValidationErrors(errors)
@@ -284,64 +271,30 @@ export function FolioForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!validate()) return
-
-    if (isEditing && editingFolio) {
-      const updateData: UpdateFolioRequest = {
-        folio: folioData.folio,
-        email: folioData.email,
-        telefono: folioData.telefono,
-        calle: folioData.calle,
-        numero: folioData.numero,
-        colonia: folioData.colonia,
-        municipio: folioData.municipio,
-        estado: folioData.estado,
-        codigoPostal: folioData.codigoPostal,
-        representations: representationsData.map((rep) => ({
-          representation: rep.representation,
-          paternalLastName: rep.paternalLastName,
-          maternalLastName: rep.maternalLastName,
-          name: rep.name,
-          voterKey: rep.voterKey,
-          phone: rep.phone,
-        })),
+    if (submitting || !validate()) return
+    setSubmissionError(null)
+    setSubmitting(true)
+    try {
+      const data: UpdateFolioRequest = {
+        ...folioData,
+        email: userData.email,
+        telefono: userData.phone,
+        representations: representationsData,
       }
-      await onSubmit(updateData)
-    } else {
-      const createData: CreateFolioRequest = {
-        folio: folioData.folio,
-        email: folioData.email,
-        telefono: folioData.telefono,
-        calle: folioData.calle,
-        numero: folioData.numero,
-        colonia: folioData.colonia,
-        municipio: folioData.municipio,
-        estado: folioData.estado,
-        codigoPostal: folioData.codigoPostal,
-        user: {
-          username: `${folioData.folio}${userData.username}`,
-          password: userData.password,
-          name: userData.name,
-          lastName: userData.lastName,
-          motherLastName: userData.motherLastName,
-          email: userData.email,
-          phone: userData.phone,
-        },
-        representations: representationsData.map((rep) => ({
-          representation: rep.representation,
-          paternalLastName: rep.paternalLastName,
-          maternalLastName: rep.maternalLastName,
-          name: rep.name,
-          voterKey: rep.voterKey,
-          phone: rep.phone,
-        })),
+      if (isEditing) {
+        await onSubmit(data)
+      } else {
+        const createData: CreateFolioRequest = {
+          ...data,
+          user: { ...userData, password: await encryptCredential(userData.password) },
+        }
+        await onSubmit(createData)
       }
-      await onSubmit(createData)
+    } catch (cause) {
+      setSubmissionError(cause instanceof Error ? cause.message : 'No se pudo enviar el folio.')
+    } finally {
+      setSubmitting(false)
     }
-  }
-
-  const getFieldError = (field: string): string | undefined => {
-    return validationErrors[field]
   }
 
   const getRepresentationErrors = (): string[] => {
@@ -361,101 +314,53 @@ export function FolioForm({
         {isEditing ? 'Editar Folio' : 'Captura de Folio'}
       </Typography>
 
-      {error && (
+      {(error || submissionError) && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+          {error || submissionError}
         </Alert>
       )}
 
-      <Accordion defaultExpanded>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography fontWeight="bold">Datos del Folio</Typography>
-        </AccordionSummary>
-        <AccordionDetails sx={{ py: 1.5, px: 2 }}>
-          <FolioInfoSection
-            values={folioData}
-            onChange={handleFolioChange}
-            errors={{
-              folio: getFieldError('folio'),
-              email: getFieldError('email'),
-              calle: getFieldError('calle'),
-              numero: getFieldError('numero'),
-              colonia: getFieldError('colonia'),
-              municipio: getFieldError('municipio'),
-              estado: getFieldError('estado'),
-              codigoPostal: getFieldError('codigoPostal'),
-            }}
-            isEditing={isEditing}
-          />
-        </AccordionDetails>
-      </Accordion>
+      <Box component="section" sx={{ mb: 3 }}>
+        <Typography component="h2" variant="h6" gutterBottom>Datos del Usuario</Typography>
+        <UserInfoSection
+          values={userData}
+          onChange={handleUserChange}
+          errors={validationErrors}
+          isEditing={isEditing}
+        />
+      </Box>
 
-      <Accordion defaultExpanded>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography fontWeight="bold">Representaciones</Typography>
-        </AccordionSummary>
-        <AccordionDetails sx={{ py: 1.5, px: 2 }}>
-          <RepresentationSection
-            representations={representations}
-            values={representationsData}
-            onChange={handleRepresentationChange}
-            errors={getRepresentationErrors()}
-          />
-        </AccordionDetails>
-      </Accordion>
+      <Box component="section" sx={{ mb: 3 }}>
+        <Typography component="h2" variant="h6" gutterBottom>Datos del Folio</Typography>
+        <FolioInfoSection
+          values={folioData}
+          onChange={handleFolioChange}
+          errors={validationErrors}
+          isEditing={isEditing}
+        />
+      </Box>
 
-      {!isEditing && (
-        <Accordion defaultExpanded>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography fontWeight="bold">Datos del Usuario</Typography>
-          </AccordionSummary>
-          <AccordionDetails sx={{ py: 1.5, px: 2 }}>
-            <UserInfoSection
-              folio={folioData.folio}
-              values={userData}
-              onChange={handleUserChange}
-              errors={{
-                username: getFieldError('username'),
-                password: getFieldError('password'),
-                name: getFieldError('name'),
-                lastName: getFieldError('lastName'),
-                motherLastName: getFieldError('motherLastName'),
-                email: getFieldError('userEmail'),
-                phone: getFieldError('phone'),
-              }}
-            />
-          </AccordionDetails>
-        </Accordion>
-      )}
-
-      {isEditing && (
-        <Accordion defaultExpanded>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography fontWeight="bold">Datos del Usuario (solo lectura)</Typography>
-          </AccordionSummary>
-          <AccordionDetails sx={{ py: 1.5, px: 2 }}>
-            <UserInfoSection
-              folio={folioData.folio}
-              values={userData}
-              onChange={handleUserChange}
-              errors={{}}
-              isEditing
-            />
-          </AccordionDetails>
-        </Accordion>
-      )}
+      <Box component="section" sx={{ mb: 3 }}>
+        <Typography component="h2" variant="h6" gutterBottom>Representaciones</Typography>
+        <RepresentationSection
+          representations={representations}
+          values={representationsData}
+          onChange={handleRepresentationChange}
+          errors={getRepresentationErrors()}
+        />
+      </Box>
 
       <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
         <Button
           type="submit"
           variant="contained"
-          disabled={loading}
-          startIcon={loading ? <CircularProgress size={20} /> : undefined}
+          disabled={loading || submitting}
+          startIcon={loading || submitting ? <CircularProgress size={20} /> : undefined}
         >
           {isEditing ? 'Actualizar' : 'Registrar'}
         </Button>
         {isEditing && (
-          <Button variant="outlined" onClick={onCancel} disabled={loading}>
+          <Button variant="outlined" onClick={onCancel} disabled={loading || submitting}>
             Cancelar
           </Button>
         )}

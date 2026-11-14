@@ -1,5 +1,6 @@
 import { Box, TextField, Typography, Stack } from '@mui/material'
 import type { KeyValueCatalog } from '../../../../types/demarcacion'
+import { representationNameFieldWidth } from './folioFieldLayout'
 
 interface RepresentationData {
   representation: string
@@ -60,7 +61,7 @@ export function RepresentationSection({
                 onChange={(e) => onChange(index, 'name', e.target.value)}
                 required
                 size="small"
-                sx={{ width: 180 }}
+                sx={{ width: representationNameFieldWidth }}
               />
               <TextField
                 label="Clave de Elector"

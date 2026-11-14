@@ -26,6 +26,8 @@ export interface FolioUser {
 
 export interface FolioUserSummary {
   username: string
+  email?: string | null
+  phone?: string | null
 }
 
 export interface Folio {

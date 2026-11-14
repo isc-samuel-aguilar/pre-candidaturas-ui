@@ -1,4 +1,5 @@
 import { authClient, type ApiError } from './apiClient'
+import { encryptCredential } from './credentialService'
 
 export interface LoginResponse {
   token: string
@@ -41,14 +42,12 @@ export async function login(username: string, password: string): Promise<LoginRe
   try {
     const response = await authClient.post<LoginResponse>(
       '/login',
-      undefined,
-      {
-        includeAuth: false,
-        queryParams: { username, password }
-      }
+      { username, password: await encryptCredential(password) },
+      { includeAuth: false }
     )
     return response.data
   } catch (error) {
+    if (error instanceof Error) throw { message: error.message, status: 0, type: 'network' } satisfies AuthError
     throw mapApiErrorToAuthError(error as ApiError)
   }
 }

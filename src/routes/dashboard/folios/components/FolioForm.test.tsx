@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { FolioForm } from './FolioForm'
@@ -6,6 +6,10 @@ import { generateDummyData } from '../../../../utils/dummyData'
 import { StatusEnum } from '../../../../types/enums'
 import type { KeyValueCatalog } from '../../../../types/demarcacion'
 import type { Folio as FolioType } from '../../../../types/folio'
+
+vi.mock('../../../../services/credentialService', () => ({
+  encryptCredential: vi.fn().mockResolvedValue('encrypted-password'),
+}))
 
 const representations: KeyValueCatalog[] = [
   {
@@ -30,7 +34,7 @@ const editingFolio: FolioType = {
   estado: 'Aguascalientes',
   codigoPostal: '20000',
   userId: 3,
-  user: { username: 'F-2026user' },
+  user: { username: 'user', email: 'associated@test.com', phone: '4492221111' },
   status: StatusEnum.VALIDO,
   representations: [
     {
@@ -77,9 +81,9 @@ function renderForm({
   return { onSubmit }
 }
 
-function accordion(title: string) {
-  const root = screen.getByText(title).closest('div.MuiAccordion-root')
-  if (!root) throw new Error(`Accordion "${title}" not found`)
+function section(title: string) {
+  const root = screen.getByText(title).closest('section')
+  if (!root) throw new Error(`Section "${title}" not found`)
   return within(root as HTMLElement)
 }
 
@@ -96,19 +100,11 @@ function submitForm() {
   fireEvent.submit(form)
 }
 
-function fillCreateForm(folioPhone?: string) {
-  const folioSection = accordion('Datos del Folio')
+function fillCreateForm() {
+  const folioSection = section('Datos del Folio')
   fireEvent.change(field(folioSection, 'Folio'), {
     target: { value: 'F-2026' },
   })
-  fireEvent.change(field(folioSection, 'Correo Electrónico'), {
-    target: { value: 'folio@test.com' },
-  })
-  if (folioPhone !== undefined) {
-    fireEvent.change(field(folioSection, 'Teléfono'), {
-      target: { value: folioPhone },
-    })
-  }
   fireEvent.change(field(folioSection, 'Calle'), {
     target: { value: 'Av. Reforma' },
   })
@@ -128,7 +124,7 @@ function fillCreateForm(folioPhone?: string) {
     target: { value: '20000' },
   })
 
-  const representationSection = accordion('Representaciones')
+  const representationSection = section('Representaciones')
   fireEvent.change(field(representationSection, 'Apellido Paterno'), {
     target: { value: 'Lopez' },
   })
@@ -142,7 +138,7 @@ function fillCreateForm(folioPhone?: string) {
     target: { value: '4490000000' },
   })
 
-  const userSection = accordion('Datos del Usuario')
+  const userSection = section('Datos del Usuario')
   fireEvent.change(field(userSection, 'Usuario'), {
     target: { value: 'user' },
   })
@@ -163,98 +159,58 @@ function fillCreateForm(folioPhone?: string) {
   })
 }
 
-describe('FolioForm - Teléfono del folio (C11 / task-ui-19)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('shows the Teléfono field in the folio section without being required', () => {
+describe('FolioForm - contacto compartido', () => {
+  it('shows the user section first and only shows its contact fields there', () => {
     renderForm()
 
-    const telefono = accordion('Datos del Folio').getByLabelText('Teléfono')
-
-    expect(telefono).toBeInTheDocument()
-    expect(telefono).not.toHaveAttribute('required')
-    expect(telefono).not.toHaveAttribute('aria-required', 'true')
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent))
+      .toEqual(['Datos del Usuario', 'Datos del Folio', 'Representaciones'])
+    expect(section('Datos del Folio').queryByLabelText(/Correo Electrónico|Teléfono/)).toBeNull()
+    expect(field(section('Datos del Usuario'), 'Teléfono')).toBeRequired()
   })
 
-  it('allows typing the folio phone number', () => {
-    renderForm()
-
-    const telefono = accordion('Datos del Folio').getByLabelText('Teléfono')
-    fireEvent.change(telefono, { target: { value: '4491234567' } })
-
-    expect(accordion('Datos del Folio').getByLabelText('Teléfono')).toHaveValue(
-      '4491234567'
-    )
-  })
-
-  it('sends telefono in the create payload', async () => {
-    const { onSubmit } = renderForm()
-
-    fillCreateForm('4491234567')
-    expect(screen.getByRole('button', { name: 'Registrar' })).toBeInTheDocument()
-    submitForm()
-
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ telefono: '4491234567' })
-    )
-  })
-
-  it('does not require the folio phone number to create a folio', async () => {
+  it('sends the same contact for both records and uses the username without a prefix', async () => {
     const { onSubmit } = renderForm()
 
     fillCreateForm()
     submitForm()
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ telefono: '' }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'user@test.com',
+      telefono: '4491112222',
+      user: expect.objectContaining({
+        username: 'user',
+        password: 'encrypted-password',
+        email: 'user@test.com',
+        phone: '4491112222',
+      }),
+    }))
   })
 
-  it('prefills the folio phone number when editing', () => {
-    renderForm({ editingFolio })
-
-    expect(accordion('Datos del Folio').getByLabelText('Teléfono')).toHaveValue(
-      '4490001111'
-    )
-  })
-
-  it('sends telefono in the update payload', async () => {
+  it('prefills the associated contact on edit and sends the edited contact in the Folio PUT shape', async () => {
     const { onSubmit } = renderForm({ editingFolio })
+    const userSection = section('Datos del Usuario')
+    expect(field(userSection, 'Usuario')).toHaveValue('user')
+    expect(field(userSection, 'Correo Electrónico')).toHaveValue('associated@test.com')
+    expect(field(userSection, 'Teléfono')).toHaveValue('4492221111')
 
-    fireEvent.change(accordion('Datos del Folio').getByLabelText('Teléfono'), {
-      target: { value: '5550001111' },
-    })
-    expect(screen.getByRole('button', { name: 'Actualizar' })).toBeInTheDocument()
+    fireEvent.change(field(userSection, 'Correo Electrónico'), { target: { value: 'new@test.com' } })
+    fireEvent.change(field(userSection, 'Teléfono'), { target: { value: '5550001111' } })
     submitForm()
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ folio: 'F-2026', telefono: '5550001111' })
-    )
-  })
-})
-
-describe('FolioForm - datos dummy (dummyData)', () => {
-  it('fills the folio Teléfono with the same value as the user Teléfono', () => {
-    renderForm({ dummyDataToFill: generateDummyData('folios', 'F-2026') })
-
-    const userPhone = field(accordion('Datos del Usuario'), 'Teléfono')
-    expect(userPhone).toHaveValue('4491234567')
-
-    const folioPhone = field(accordion('Datos del Folio'), 'Teléfono')
-    expect(folioPhone).toHaveValue(userPhone.getAttribute('value'))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      folio: 'F-2026', email: 'new@test.com', telefono: '5550001111',
+    }))
+    expect(onSubmit).not.toHaveBeenCalledWith(expect.objectContaining({ user: expect.anything() }))
   })
 
-  it('fills the rest of the folio section from dummy data', () => {
+  it('fills the shared contact from dummy data', () => {
     renderForm({ dummyDataToFill: generateDummyData('folios', 'F-2026') })
 
-    const folioSection = accordion('Datos del Folio')
-    expect(field(folioSection, 'Folio')).toHaveValue('F-2026')
-    expect(field(folioSection, 'Correo Electrónico')).toHaveValue(
-      'F-2026@test.com'
-    )
-    expect(field(folioSection, 'Calle')).toHaveValue('Av. Reforma')
+    expect(field(section('Datos del Usuario'), 'Teléfono')).toHaveValue('4491234567')
+    expect(field(section('Datos del Folio'), 'Folio')).toHaveValue('F-2026')
+    expect(field(section('Datos del Folio'), 'Calle')).toHaveValue('Av. Reforma')
   })
 })
