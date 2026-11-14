@@ -22,6 +22,10 @@ export default defineConfig(({ command }) => ({
   server: {
     port: 9000,
     strictPort: true,
+    proxy: {
+      '/api/v1/auth/': 'http://localhost:9001',
+      '/api/v1/': 'http://localhost:9002',
+    },
   },
   test: {
     globals: true,
