@@ -1,3 +1,4 @@
+import { openOrDownloadFile } from '../utils/openOrDownloadFile'
 import { apiClient, type ApiError } from './apiClient'
 import type { DemarcationDocument, Documento, KeyValueCatalog } from '../types/demarcacion'
 import type { StatusEnum } from '../types/enums'
@@ -159,24 +160,17 @@ export async function updateDocumentStatus(
 export async function downloadDocumentFile(doc: Documento, token: string): Promise<void> {
   const apiUrl = import.meta.env.VITE_API_URL
 
-  const response = await fetch(
-    `${apiUrl}/documents/${doc.id}/download`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
+  await openOrDownloadFile(doc.originalFilename || doc.keyValueCatalogValue, async () => {
+    const response = await fetch(
+      `${apiUrl}/documents/${doc.id}/download`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
 
-  if (!response.ok) {
-    throw new Error(`Error ${response.status}: ${response.statusText}`)
-  }
-
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = doc.originalFilename || doc.keyValueCatalogValue
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}: ${response.statusText}`)
+    }
+    return response.blob()
+  })
 }
 
 const GENERATED_DOCUMENT_ERROR_MESSAGES: Record<string, string> = {
@@ -209,28 +203,6 @@ export function toDocumentoKey(catalogValue: string): string {
     .replace(/ /g, '_')
 }
 
-function getGeneratedFilename(response: Response, fallback: string): string {
-  const header = response.headers.get('Content-Disposition')
-  if (!header) return fallback
-
-  const encodedMatch = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header)
-  if (encodedMatch?.[1]) {
-    try {
-      return decodeURIComponent(encodedMatch[1].trim())
-    } catch {
-      // fall through to the plain filename variants
-    }
-  }
-
-  const quotedMatch = /filename\s*=\s*"([^"]+)"/i.exec(header)
-  if (quotedMatch?.[1]) return quotedMatch[1]
-
-  const bareMatch = /filename\s*=\s*([^;]+)/i.exec(header)
-  if (bareMatch?.[1]) return bareMatch[1].trim()
-
-  return fallback
-}
-
 export async function generateDocumentForSign(
   preCandidatoId: number,
   documento: string,
@@ -238,43 +210,36 @@ export async function generateDocumentForSign(
 ): Promise<void> {
   const apiUrl = import.meta.env.VITE_API_URL
 
-  const response = await fetch(
-    `${apiUrl}/documents/pre-candidatos/${preCandidatoId}/generated?documento=${encodeURIComponent(documento)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
+  await openOrDownloadFile(`${documento}.pdf`, async () => {
+    const response = await fetch(
+      `${apiUrl}/documents/pre-candidatos/${preCandidatoId}/generated?documento=${encodeURIComponent(documento)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
 
-  if (!response.ok) {
-    let errorCode: string | undefined
-    let apiMessage: string | undefined
-    try {
-      if (response.headers.get('content-type')?.includes('application/json')) {
-        const body = (await response.json()) as { message?: string; error?: string }
-        apiMessage = body?.message
-        errorCode = body?.error
+    if (!response.ok) {
+      let errorCode: string | undefined
+      let apiMessage: string | undefined
+      try {
+        if (response.headers.get('content-type')?.includes('application/json')) {
+          const body = (await response.json()) as { message?: string; error?: string }
+          apiMessage = body?.message
+          errorCode = body?.error
+        }
+      } catch {
+        // ignore malformed error bodies
       }
-    } catch {
-      // ignore malformed error bodies
+
+      throw mapApiError({
+        message:
+          (errorCode && GENERATED_DOCUMENT_ERROR_MESSAGES[errorCode]) ||
+          apiMessage ||
+          `Error ${response.status}`,
+        status: response.status,
+        error: errorCode,
+      })
     }
-
-    throw mapApiError({
-      message:
-        (errorCode && GENERATED_DOCUMENT_ERROR_MESSAGES[errorCode]) ||
-        apiMessage ||
-        `Error ${response.status}`,
-      status: response.status,
-      error: errorCode,
-    })
-  }
-
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = getGeneratedFilename(response, `${documento}.pdf`)
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+    return response.blob()
+  })
 }
 
 function demarcationDocumentsPath(folioId: number, fdmId: number): string {
@@ -356,24 +321,17 @@ export async function downloadDemarcationDocumentFile(
 ): Promise<void> {
   const apiUrl = import.meta.env.VITE_API_URL
 
-  const response = await fetch(
-    `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/${doc.id}/download`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
+  await openOrDownloadFile(doc.originalFilename || doc.keyValueCatalogValue, async () => {
+    const response = await fetch(
+      `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/${doc.id}/download`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
 
-  if (!response.ok) {
-    throw new Error(`Error ${response.status}: ${response.statusText}`)
-  }
-
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = doc.originalFilename || doc.keyValueCatalogValue
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}: ${response.statusText}`)
+    }
+    return response.blob()
+  })
 }
 
 async function mapDemarcationFetchError(response: Response): Promise<never> {
@@ -407,24 +365,17 @@ export async function generateDemarcationDocument(
 ): Promise<void> {
   const apiUrl = import.meta.env.VITE_API_URL
 
-  const response = await fetch(
-    `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/generated-v2?documento=${encodeURIComponent(documento)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
+  await openOrDownloadFile(`${documento}.pdf`, async () => {
+    const response = await fetch(
+      `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/generated-v2?documento=${encodeURIComponent(documento)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
 
-  if (!response.ok) {
-    await mapDemarcationFetchError(response)
-  }
-
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = getGeneratedFilename(response, `${documento}.pdf`)
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+    if (!response.ok) {
+      await mapDemarcationFetchError(response)
+    }
+    return response.blob()
+  })
 }
 
 export async function downloadGeneratedDemarcationDocument(
@@ -435,22 +386,15 @@ export async function downloadGeneratedDemarcationDocument(
 ): Promise<void> {
   const apiUrl = import.meta.env.VITE_API_URL
 
-  const response = await fetch(
-    `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/generated?documento=${encodeURIComponent(documento)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  )
+  await openOrDownloadFile(`${documento}.pdf`, async () => {
+    const response = await fetch(
+      `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/generated?documento=${encodeURIComponent(documento)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
 
-  if (!response.ok) {
-    await mapDemarcationFetchError(response)
-  }
-
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = getGeneratedFilename(response, `${documento}.pdf`)
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+    if (!response.ok) {
+      await mapDemarcationFetchError(response)
+    }
+    return response.blob()
+  })
 }

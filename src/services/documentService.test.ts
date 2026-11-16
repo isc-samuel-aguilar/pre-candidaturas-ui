@@ -399,11 +399,23 @@ describe('updateDocumentStatus', () => {
 })
 
 describe('downloadDocumentFile', () => {
+  const replace = vi.fn()
+  const close = vi.fn()
+
   beforeEach(() => {
+    replace.mockClear()
+    close.mockClear()
+    vi.useFakeTimers()
+    vi.spyOn(window, 'open').mockReturnValue({
+      opener: window,
+      location: { replace },
+      close,
+    } as unknown as Window)
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
@@ -442,7 +454,7 @@ describe('downloadDocumentFile', () => {
     expect(anchors[0]?.download).toBe('INE')
   })
 
-  it('uses originalFilename as download name when present', async () => {
+  it('opens an uploaded PDF using the original filename as a hint', async () => {
     const docWithName = { ...sampleDocument, originalFilename: 'nombre-archivo.pdf' }
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) => ({
@@ -468,7 +480,8 @@ describe('downloadDocumentFile', () => {
 
     await downloadDocumentFile(docWithName, 'token123')
 
-    expect(anchors[0]?.download).toBe('nombre-archivo.pdf')
+    expect(replace).toHaveBeenCalledWith('blob:mock')
+    expect(anchors).toHaveLength(0)
   })
 
   it('throws when the download response is not ok', async () => {
@@ -534,11 +547,23 @@ describe('getDocumentDisplayName', () => {
 })
 
 describe('generateDocumentForSign', () => {
+  const replace = vi.fn()
+  const close = vi.fn()
+
   beforeEach(() => {
+    replace.mockClear()
+    close.mockClear()
+    vi.useFakeTimers()
+    vi.spyOn(window, 'open').mockReturnValue({
+      opener: window,
+      location: { replace },
+      close,
+    } as unknown as Window)
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
@@ -559,15 +584,7 @@ describe('generateDocumentForSign', () => {
     )
     ;(URL as { revokeObjectURL: (url: string) => void }).revokeObjectURL = vi.fn()
 
-    const anchors: HTMLAnchorElement[] = []
-    const originalCreateElement = document.createElement.bind(document)
-    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
-      const el = originalCreateElement(tagName)
-      if (tagName === 'a') anchors.push(el as HTMLAnchorElement)
-      return el
-    })
-
-    return { fetchMock, anchors }
+    return { fetchMock }
   }
 
   it('calls the official endpoint by precandidato id with the normalized documento (C5)', async () => {
@@ -594,20 +611,20 @@ describe('generateDocumentForSign', () => {
     expect(String(url)).not.toContain('claveIne')
   })
 
-  it('uses the filename from the Content-Disposition header', async () => {
-    const { anchors } = stubPdfFetch('attachment; filename="salida.pdf"')
+  it('opens the PDF in a tab even with an attachment filename', async () => {
+    stubPdfFetch('attachment; filename="salida.pdf"')
 
     await generateDocumentForSign(7, 'CV_PUBLICO_APP', 'token123')
 
-    expect(anchors[0]?.download).toBe('salida.pdf')
+    expect(replace).toHaveBeenCalledWith('blob:mock')
   })
 
-  it('falls back to <documento>.pdf when Content-Disposition is missing', async () => {
-    const { anchors } = stubPdfFetch(null)
+  it('opens the PDF in a tab without Content-Disposition', async () => {
+    stubPdfFetch(null)
 
     await generateDocumentForSign(7, 'CV_PUBLICO_APP', 'token123')
 
-    expect(anchors[0]?.download).toBe('CV_PUBLICO_APP.pdf')
+    expect(replace).toHaveBeenCalledWith('blob:mock')
   })
 
   it('maps PRECANDIDATO_NOT_FOUND to a spanish message', async () => {
@@ -805,11 +822,23 @@ describe('deleteDemarcationDocument', () => {
 })
 
 describe('downloadDemarcationDocumentFile', () => {
+  const replace = vi.fn()
+  const close = vi.fn()
+
   beforeEach(() => {
+    replace.mockClear()
+    close.mockClear()
+    vi.useFakeTimers()
+    vi.spyOn(window, 'open').mockReturnValue({
+      opener: window,
+      location: { replace },
+      close,
+    } as unknown as Window)
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
@@ -845,7 +874,8 @@ describe('downloadDemarcationDocumentFile', () => {
         headers: { Authorization: 'Bearer token123' },
       })
     )
-    expect(anchors[0]?.download).toBe('fur-app.pdf')
+    expect(replace).toHaveBeenCalledWith('blob:mock')
+    expect(anchors).toHaveLength(0)
   })
 
   it('falls back to keyValueCatalogValue when originalFilename is missing', async () => {
@@ -872,7 +902,8 @@ describe('downloadDemarcationDocumentFile', () => {
 
     await downloadDemarcationDocumentFile(5, 10, docNoName, 'token123')
 
-    expect(anchors[0]?.download).toBe('FORMATO UNICO DE REGISTRO (FUR) APP.pdf')
+    expect(replace).toHaveBeenCalledWith('blob:mock')
+    expect(anchors).toHaveLength(0)
   })
 
   it('throws when the download response is not ok', async () => {
@@ -890,11 +921,23 @@ describe('downloadDemarcationDocumentFile', () => {
 })
 
 describe('generateDemarcationDocument', () => {
+  const replace = vi.fn()
+  const close = vi.fn()
+
   beforeEach(() => {
+    replace.mockClear()
+    close.mockClear()
+    vi.useFakeTimers()
+    vi.spyOn(window, 'open').mockReturnValue({
+      opener: window,
+      location: { replace },
+      close,
+    } as unknown as Window)
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
@@ -915,15 +958,7 @@ describe('generateDemarcationDocument', () => {
     )
     ;(URL as { revokeObjectURL: (url: string) => void }).revokeObjectURL = vi.fn()
 
-    const anchors: HTMLAnchorElement[] = []
-    const originalCreateElement = document.createElement.bind(document)
-    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
-      const el = originalCreateElement(tagName)
-      if (tagName === 'a') anchors.push(el as HTMLAnchorElement)
-      return el
-    })
-
-    return { fetchMock, anchors }
+    return { fetchMock }
   }
 
   it('calls the generated-v2 endpoint with the FUR documento key and bearer token', async () => {
@@ -946,20 +981,20 @@ describe('generateDemarcationDocument', () => {
     )
   })
 
-  it('uses the filename from the Content-Disposition header', async () => {
-    const { anchors } = stubPdfFetch('attachment; filename="salida-fur.pdf"')
+  it('opens the PDF in a tab even with an attachment filename', async () => {
+    stubPdfFetch('attachment; filename="salida-fur.pdf"')
 
     await generateDemarcationDocument(5, 10, 'FORMATO_UNICO_DE_REGISTRO_FUR_APP', 'token123')
 
-    expect(anchors[0]?.download).toBe('salida-fur.pdf')
+    expect(replace).toHaveBeenCalledWith('blob:mock')
   })
 
-  it('falls back to <documento>.pdf when Content-Disposition is missing', async () => {
-    const { anchors } = stubPdfFetch(null)
+  it('opens the PDF in a tab without Content-Disposition', async () => {
+    stubPdfFetch(null)
 
     await generateDemarcationDocument(5, 10, 'FORMATO_UNICO_DE_REGISTRO_FUR_APP', 'token123')
 
-    expect(anchors[0]?.download).toBe('FORMATO_UNICO_DE_REGISTRO_FUR_APP.pdf')
+    expect(replace).toHaveBeenCalledWith('blob:mock')
   })
 
   it('maps FOLIO_DEMARCACION_NOT_VALID to a spanish message', async () => {
@@ -1027,11 +1062,23 @@ describe('generateDemarcationDocument', () => {
 })
 
 describe('downloadGeneratedDemarcationDocument (C13 acuse)', () => {
+  const replace = vi.fn()
+  const close = vi.fn()
+
   beforeEach(() => {
+    replace.mockClear()
+    close.mockClear()
+    vi.useFakeTimers()
+    vi.spyOn(window, 'open').mockReturnValue({
+      opener: window,
+      location: { replace },
+      close,
+    } as unknown as Window)
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
@@ -1088,7 +1135,8 @@ describe('downloadGeneratedDemarcationDocument (C13 acuse)', () => {
 
     await downloadGeneratedDemarcationDocument(5, 10, 'ACUSE_DE_DOCUMENTOS', 'token123')
 
-    expect(anchors[0]?.download).toBe('ACUSE_DE_DOCUMENTOS - PRIMERA.pdf')
+    expect(replace).toHaveBeenCalledWith('blob:mock')
+    expect(anchors).toHaveLength(0)
   })
 
   it('falls back to <documento>.pdf when Content-Disposition is missing', async () => {
@@ -1096,7 +1144,8 @@ describe('downloadGeneratedDemarcationDocument (C13 acuse)', () => {
 
     await downloadGeneratedDemarcationDocument(5, 10, 'ACUSE_DE_DOCUMENTOS', 'token123')
 
-    expect(anchors[0]?.download).toBe('ACUSE_DE_DOCUMENTOS.pdf')
+    expect(replace).toHaveBeenCalledWith('blob:mock')
+    expect(anchors).toHaveLength(0)
   })
 
   it('maps DEMARCATION error codes to a spanish message', async () => {

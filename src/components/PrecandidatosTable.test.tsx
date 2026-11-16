@@ -678,15 +678,15 @@ describe('PrecandidatosTable - secciones de documentos visibles por defecto', ()
     mocks.getDocumentTypes.mockResolvedValue(fullDocumentTypes)
   })
 
-  async function renderGroupedAndExpand() {
+  async function renderGroupedAndExpand(isRegister = false) {
     render(
       <PrecandidatosTable
         folioId={1}
         demarcacionName="ASIENTOS"
         demarcacionStatus={StatusEnum.VALIDO}
         groupDocuments
-        allowDocActions={false}
-        allowDocValidation
+        allowDocActions={isRegister}
+        allowDocValidation={!isRegister}
       />
     )
 
@@ -701,7 +701,7 @@ describe('PrecandidatosTable - secciones de documentos visibles por defecto', ()
     mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'REGISTER' } })
     mocks.getDocumentsByPrecandidato.mockResolvedValue([documentFixture])
 
-    await renderGroupedAndExpand()
+    await renderGroupedAndExpand(true)
 
     expect(await screen.findByText('ine.pdf')).toBeInTheDocument()
     expect(screen.getByText('Archivos para subir')).toBeInTheDocument()
@@ -715,13 +715,29 @@ describe('PrecandidatosTable - secciones de documentos visibles por defecto', ()
       { ...documentFixture, status: StatusEnum.VALIDO },
     ])
 
-    await renderGroupedAndExpand()
+    await renderGroupedAndExpand(true)
 
     expect(await screen.findAllByRole('columnheader', { name: 'Tipo' })).toHaveLength(2)
     expect(screen.getByText('Documentos por firmar y validar')).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /^Expandir Documentos/ })
     ).not.toBeInTheDocument()
+  })
+
+  it('shows the saved validator comment between Eliminar and Status for REGISTER', async () => {
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'REGISTER' } })
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([
+      { ...documentFixture, statusDescription: 'Revisar la segunda página' },
+    ])
+
+    await renderGroupedAndExpand(true)
+
+    const comment = await screen.findByText('Revisar la segunda página')
+    const table = comment.closest('table')!
+    const headers = within(table).getAllByRole('columnheader').map((cell) => cell.textContent)
+    expect(headers.slice(-3)).toEqual(['Eliminar', 'Comentario', 'Status'])
+    expect(within(table).queryByRole('textbox')).not.toBeInTheDocument()
+    expect(within(table).queryByRole('columnheader', { name: 'Validar' })).not.toBeInTheDocument()
   })
 
   it('shows both sections for VALIDATOR even when documents are incomplete', async () => {

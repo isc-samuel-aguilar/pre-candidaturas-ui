@@ -139,7 +139,8 @@ export function PrecandidatosTable({
   allowDocValidation = false,
   groupDocuments = false,
 }: PrecandidatosTableProps) {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
+  const showReadOnlyDocComment = user?.role === 'REGISTER' && !allowDocValidation
   const [precandidatos, setPrecandidatos] = useState<Precandidato[]>([])
   const [loading, setLoading] = useState(autoLoad)
   const [error, setError] = useState<string | null>(null)
@@ -448,6 +449,7 @@ export function PrecandidatosTable({
     if (allowDocActions) weights.push(DOC_COLUMN_WEIGHTS.subir)
     weights.push(DOC_COLUMN_WEIGHTS.nombre)
     if (allowDocActions) weights.push(DOC_COLUMN_WEIGHTS.eliminar)
+    if (showReadOnlyDocComment) weights.push(DOC_COLUMN_WEIGHTS.comentario)
     weights.push(DOC_COLUMN_WEIGHTS.status)
     if (allowDocValidation) {
       weights.push(
@@ -491,6 +493,7 @@ export function PrecandidatosTable({
             {allowDocActions && <TableCell align="center">Subir</TableCell>}
             <TableCell>Nombre</TableCell>
             {allowDocActions && <TableCell align="center">Eliminar</TableCell>}
+            {showReadOnlyDocComment && <TableCell>Comentario</TableCell>}
             <TableCell align="center">Status</TableCell>
             {allowDocValidation && (
               <TableCell align="center">Validar</TableCell>
@@ -578,7 +581,18 @@ export function PrecandidatosTable({
                     <Button
                       variant="text"
                       size="small"
-                      onClick={() => doc && token && downloadDocumentFile(doc, token)}
+                      onClick={async () => {
+                        if (!token) return
+                        try {
+                          await downloadDocumentFile(doc, token)
+                        } catch (error) {
+                          setSnackbar({
+                            open: true,
+                            message: error instanceof Error ? error.message : 'No se pudo abrir el archivo',
+                            severity: 'error',
+                          })
+                        }
+                      }}
                       sx={{ textTransform: 'none', color: 'primary.main', justifyContent: 'flex-start' }}
                     >
                       {doc?.originalFilename || getDocumentDisplayName(row.catalogType)}
@@ -602,6 +616,13 @@ export function PrecandidatosTable({
                     >
                       Eliminar
                     </Button>
+                  </TableCell>
+                )}
+                {showReadOnlyDocComment && (
+                  <TableCell>
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                      {doc?.statusDescription?.trim() ? doc.statusDescription : '—'}
+                    </Typography>
                   </TableCell>
                 )}
                 <TableCell align="center">

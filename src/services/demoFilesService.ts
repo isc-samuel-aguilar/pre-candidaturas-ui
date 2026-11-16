@@ -1,3 +1,4 @@
+import { openOrDownloadFile } from '../utils/openOrDownloadFile'
 import { getCurrentUser } from './authService'
 import {
   demoFileHref,
@@ -28,17 +29,6 @@ export function isDemoFileError(error: unknown): error is DemoFileError {
   )
 }
 
-function saveBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  document.body.appendChild(anchor)
-  anchor.click()
-  document.body.removeChild(anchor)
-  URL.revokeObjectURL(url)
-}
-
 export async function validateSession(token: string | null): Promise<void> {
   if (!token) {
     throw { message: DEMO_FILE_ERROR_MESSAGES.session, type: 'session' } satisfies DemoFileError
@@ -61,25 +51,25 @@ export async function downloadDemoFile(
     throw { message: DEMO_FILE_ERROR_MESSAGES.service, type: 'service' } satisfies DemoFileError
   }
 
-  await validateSession(token)
-
   const filename = getDemoFilename(entry, type)
+  await openOrDownloadFile(filename, async () => {
+    await validateSession(token)
 
-  let response: Response
-  try {
-    response = await fetch(demoFileHref(filename))
-  } catch {
-    throw { message: DEMO_FILE_ERROR_MESSAGES.service, type: 'service' } satisfies DemoFileError
-  }
 
-  if (response.status === 404) {
-    throw { message: DEMO_FILE_ERROR_MESSAGES.missing, type: 'missing' } satisfies DemoFileError
-  }
+    let response: Response
+    try {
+      response = await fetch(demoFileHref(filename))
+    } catch {
+      throw { message: DEMO_FILE_ERROR_MESSAGES.service, type: 'service' } satisfies DemoFileError
+    }
 
-  if (!response.ok) {
-    throw { message: DEMO_FILE_ERROR_MESSAGES.service, type: 'service' } satisfies DemoFileError
-  }
+    if (response.status === 404) {
+      throw { message: DEMO_FILE_ERROR_MESSAGES.missing, type: 'missing' } satisfies DemoFileError
+    }
 
-  const blob = await response.blob()
-  saveBlob(blob, filename)
+    if (!response.ok) {
+      throw { message: DEMO_FILE_ERROR_MESSAGES.service, type: 'service' } satisfies DemoFileError
+    }
+    return response.blob()
+  })
 }
