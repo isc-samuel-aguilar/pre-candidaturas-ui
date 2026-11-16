@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Box, Container, Paper, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
 import { useAuth } from '../contexts/AuthContext'
 
-type BuildInfo = { version: string; buildTime: string }
+type BuildInfo = { version: string; buildTime: string; branch?: string; commit?: string }
 type Service = 'Auth' | 'Backend'
 
 const services: { name: Service; baseUrl: string }[] = [
@@ -22,7 +22,12 @@ async function loadBuildInfo(baseUrl: string, token: string, signal: AbortSignal
   if (typeof data?.version !== 'string' || typeof data?.buildTime !== 'string') {
     throw new Error('Invalid build metadata')
   }
-  return { version: data.version, buildTime: data.buildTime }
+  return {
+    version: data.version,
+    buildTime: data.buildTime,
+    branch: typeof data.branch === 'string' ? data.branch : undefined,
+    commit: typeof data.commit === 'string' ? data.commit : undefined,
+  }
 }
 
 export function VersionPage() {
@@ -50,7 +55,7 @@ export function VersionPage() {
   ]
 
   return (
-    <Container maxWidth="sm">
+    <Container maxWidth="md">
       <Box component="main" sx={{ py: 6 }}>
         <Typography component="h1" variant="h4" sx={{ mb: 3 }}>
           Versiones en ejecución
@@ -62,6 +67,8 @@ export function VersionPage() {
                 <TableCell>Proyecto</TableCell>
                 <TableCell>Versión</TableCell>
                 <TableCell>Compilación (CST)</TableCell>
+                <TableCell>Rama</TableCell>
+                <TableCell>Commit</TableCell>
               </TableRow>
             </TableHead>
             <TableBody aria-live="polite">
@@ -72,9 +79,11 @@ export function VersionPage() {
                     <>
                       <TableCell>{info.version}</TableCell>
                       <TableCell>{info.buildTime}</TableCell>
+                      <TableCell>{info.branch || 'No disponible'}</TableCell>
+                      <TableCell>{info.commit || 'No disponible'}</TableCell>
                     </>
                   ) : (
-                    <TableCell colSpan={2}>
+                    <TableCell colSpan={4}>
                       {info === null ? 'No disponible' : 'Consultando…'}
                     </TableCell>
                   )}

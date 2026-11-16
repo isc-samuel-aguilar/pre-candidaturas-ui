@@ -2,9 +2,22 @@ import { defineConfig, loadEnv } from 'vite'
 import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'path'
 import { demoFilesPlugin } from './server/demoFilesPlugin'
+
+function gitValue(...args: string[]): string {
+  try {
+    return execFileSync('git', args, {
+      cwd: __dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return 'unknown'
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -27,6 +40,8 @@ export default defineConfig(({ command, mode }) => {
   define: {
     __UI_BUILD_INFO__: JSON.stringify({
       version,
+      branch: gitValue('symbolic-ref', '--quiet', '--short', 'HEAD'),
+      commit: gitValue('rev-parse', '--short', 'HEAD'),
       buildTime: `${year}-${month}-${day} ${hour}-${minute}`,
     }),
   },

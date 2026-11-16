@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-declare const __UI_BUILD_INFO__: { version: string; buildTime: string }
+declare const __UI_BUILD_INFO__: { version: string; buildTime: string; branch?: string; commit?: string }
 
 interface ImportMetaEnv {
   readonly VITE_API_URL: string
