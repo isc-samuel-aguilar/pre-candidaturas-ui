@@ -17,6 +17,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Registrar con Excel', to: '/dashboard/excel', roles: ['ADMIN', 'REGISTER'] },
   { label: 'Usuarios', to: '/dashboard/usuarios', roles: ['ADMIN'] },
   { label: 'Configurar', to: '/dashboard/configuracion', roles: ['ADMIN'] },
+  { label: 'Versión', to: '/dashboard/version', roles: ['ADMIN'] },
 ]
 
 export const Route = createFileRoute('/dashboard')({

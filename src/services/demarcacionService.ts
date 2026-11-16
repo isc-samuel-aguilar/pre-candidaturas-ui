@@ -3,7 +3,7 @@ import type {
   DemarcacionCatalogo,
   FolioDemarcacion,
   Precandidato,
-  ExcelImportResult,
+  ExcelImportResponse,
 } from '../types/demarcacion'
 import type { Folio } from '../types/folio'
 import type { StatusEnum } from '../types/enums'
@@ -125,16 +125,24 @@ export async function uploadExcel(
   folioId: number,
   demarcationName: string,
   file: File
-): Promise<ExcelImportResult[]> {
+): Promise<ExcelImportResponse> {
   const formData = new FormData()
   formData.append('excel', file)
 
-  const response = await apiClient.post<ExcelImportResult[]>(
-    `/folios/${folioId}/demarcaciones/${demarcationName}/precandidatos/excel`,
-    formData,
-    { timeout: 30000 }
-  )
-  return response.data
+  try {
+    const response = await apiClient.post<ExcelImportResponse>(
+      `/folios/${folioId}/demarcaciones/${encodeURIComponent(demarcationName)}/precandidatos/excel`,
+      formData,
+      { timeout: 30000 }
+    )
+    return response.data
+  } catch (error) {
+    const apiError = error as ApiError
+    throw {
+      ...mapApiError(apiError),
+      message: apiError.errors?.join('\n') || apiError.message,
+    } satisfies DemarcacionError
+  }
 }
 
 export async function getPrecandidatos(

@@ -57,15 +57,15 @@ function ExcelPage() {
           message: `Archivo cargado exitosamente para ${demarcacion.catalogo.demarcacion}`,
           severity: 'success',
         })
-      } catch {
+      } catch (err) {
         setSnackbar({
           open: true,
-          message: error?.message || 'Error al cargar el archivo',
+          message: (err as { message?: string }).message || 'Error al cargar el archivo',
           severity: 'error',
         })
       }
     },
-    [handleUpload, error]
+    [handleUpload]
   )
 
   const handleDeleteWithFeedback = useCallback(
@@ -145,7 +145,7 @@ function ExcelPage() {
 
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={4000}
+        autoHideDuration={snackbar.severity === 'error' ? null : 4000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
@@ -153,6 +153,7 @@ function ExcelPage() {
           onClose={handleCloseSnackbar}
           severity={snackbar.severity}
           variant="filled"
+          sx={{ whiteSpace: 'pre-line', maxHeight: '50vh', overflowY: 'auto' }}
         >
           {snackbar.message}
         </Alert>

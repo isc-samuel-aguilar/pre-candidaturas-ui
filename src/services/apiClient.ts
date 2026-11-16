@@ -8,6 +8,7 @@ export interface ApiError {
   message: string
   status: number
   error?: string
+  errors?: string[]
 }
 
 interface RequestOptions extends Omit<RequestInit, 'method' | 'body'> {
@@ -91,6 +92,9 @@ class ApiClient {
           message: errorData?.message || `Error ${response.status}`,
           status: response.status,
           error: errorData?.error,
+          errors: Array.isArray(errorData?.errors)
+            ? errorData.errors.filter((message): message is string => typeof message === 'string' && !!message.trim())
+            : undefined,
         } as ApiError
       }
 

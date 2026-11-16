@@ -116,6 +116,11 @@ export interface KeyValueCatalog {
   createdDate: string
 }
 
+export interface ExcelImportResponse {
+  results: ExcelImportResult[]
+  errors: string[]
+}
+
 export interface ExcelImportResult {
   rowNumber: number
   apellidoPaterno: string

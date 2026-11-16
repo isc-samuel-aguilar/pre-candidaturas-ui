@@ -155,7 +155,7 @@ function ExcelValidationPage() {
 
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={4000}
+        autoHideDuration={snackbar.severity === 'error' ? null : 4000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
@@ -163,6 +163,7 @@ function ExcelValidationPage() {
           onClose={handleCloseSnackbar}
           severity={snackbar.severity}
           variant="filled"
+          sx={{ whiteSpace: 'pre-line', maxHeight: '50vh', overflowY: 'auto' }}
         >
           {snackbar.message}
         </Alert>

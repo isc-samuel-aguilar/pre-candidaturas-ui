@@ -13,7 +13,6 @@ import {
   getMyFolio,
   getCatalogoDemarcaciones,
   getDemarcacionesByFolio,
-  createDemarcacion,
   deleteDemarcacion,
   updateDemarcacionStatus,
   uploadExcel,
@@ -85,7 +84,6 @@ export function useDemarcaciones(options?: UseDemarcacionesOptions) {
       setUploadingIds((prev) => new Set(prev).add(demarcacion.id))
 
       try {
-        await createDemarcacion(folio.id, demarcacion.demarcacion, demarcacion.ambito)
         await uploadExcel(folio.id, demarcacion.demarcacion, file)
 
         const fdData = await getDemarcacionesByFolio(folio.id)
