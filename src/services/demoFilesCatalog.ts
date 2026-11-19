@@ -55,9 +55,36 @@ export function getDemoFilename(entry: DemoFileEntry, type: DemoFileType): strin
 }
 
 export const DEMO_FILES_URL_PREFIX = '/demo-files'
-export const DEMO_FILES_FILENAMES: readonly string[] = DEMO_FILES_CATALOG.flatMap(
-  (entry) => [entry.exampleFilename, entry.cleanFilename]
-)
+
+export function demarcacionDemoFilename(demarcacion: string, type: DemoFileType): string {
+  return type === 'example' ? `EJEMPLO LLENADO - ${demarcacion}.xlsx` : `${demarcacion}.xlsx`
+}
+
+// The remaining aliases come from the demarcation catalog seed.
+const DEMARCACION_ALIASES = [
+  'GUBERNATURA',
+  'AYTO AGUASCALIENTES',
+  'AYTO ASIENTOS',
+  'AYTO CALVILLO',
+  'AYTO COSIO',
+  'AYTO JESUS MARIA',
+  'AYTO PABELLON DE ARTEAGA',
+  'AYTO RINCON DE ROMOS',
+  'AYTO SAN JOSE DE GRACIA',
+  'AYTO TEPEZALA',
+  'AYTO SAN FRANCISCO DE LOS ROMO',
+  'AYTO EL LLANO',
+  ...Array.from({ length: 18 }, (_, index) => `DTTO ${index + 1}`),
+  'DIPUTADO RP',
+]
+
+export const DEMO_FILES_FILENAMES: readonly string[] = [
+  ...DEMO_FILES_CATALOG.flatMap((entry) => [entry.exampleFilename, entry.cleanFilename]),
+  ...DEMARCACION_ALIASES.flatMap((alias) => [
+    demarcacionDemoFilename(alias, 'example'),
+    demarcacionDemoFilename(alias, 'clean'),
+  ]),
+]
 
 export function demoFileHref(filename: string): string {
   return `${DEMO_FILES_URL_PREFIX}/${encodeURIComponent(filename)}`

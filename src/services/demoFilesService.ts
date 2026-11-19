@@ -52,6 +52,25 @@ export async function downloadDemoFile(
   }
 
   const filename = getDemoFilename(entry, type)
+  await downloadDemoFileByName(token, filename)
+}
+
+export async function isDemoFileAvailable(
+  filename: string,
+  signal: AbortSignal
+): Promise<boolean> {
+  const response = await fetch(demoFileHref(filename), {
+    method: 'HEAD',
+    cache: 'no-store',
+    signal,
+  })
+  return response.ok && !response.headers.get('content-type')?.includes('text/html')
+}
+
+export async function downloadDemoFileByName(
+  token: string | null,
+  filename: string
+): Promise<void> {
   await openOrDownloadFile(filename, async () => {
     await validateSession(token)
 

@@ -8,6 +8,10 @@ import type { DemarcacionRow, KeyValueCatalog } from '../../../../types/demarcac
 const mocks = vi.hoisted(() => ({
   useNavigate: vi.fn(),
   useAuth: vi.fn(),
+  isDemoFileAvailable: vi.fn<(filename: string, signal: AbortSignal) => Promise<boolean>>(
+    () => new Promise<boolean>(() => {})
+  ),
+  downloadDemoFileByName: vi.fn(),
   getDemarcationDocumentTypes: vi.fn(),
   getDemarcationDocuments: vi.fn(),
   uploadDemarcationDocument: vi.fn(),
@@ -68,6 +72,12 @@ vi.mock('../../../../services/documentService', () => ({
 
 vi.mock('../../../../contexts/AuthContext', () => ({
   useAuth: mocks.useAuth,
+}))
+
+vi.mock('../../../../services/demoFilesService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../services/demoFilesService')>()),
+  isDemoFileAvailable: mocks.isDemoFileAvailable,
+  downloadDemoFileByName: mocks.downloadDemoFileByName,
 }))
 
 vi.mock('../../../../components/PrecandidatosTable', () => ({
@@ -677,7 +687,9 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
     expect(mainHeaders()).toEqual([
       '',
       'Demarcación',
-      'Resumen Precandidatos',
+      'Detalles',
+      'Descargar Ejemplo',
+      'Descargar Formato',
       'Pre Candidatos',
       'Excel',
       'Eliminar',
@@ -699,14 +711,14 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
     expect(screen.getByText('—')).toBeInTheDocument()
   })
 
-  it('REGISTER: expanded row uses colSpan 8', () => {
+  it('REGISTER: expanded row uses colSpan 10', () => {
     setRole('REGISTER')
     renderTable([registeredRow])
 
     expandFirstRow()
 
-    expect(document.querySelector('td[colspan="8"]')).not.toBeNull()
-    expect(document.querySelector('td[colspan="10"]')).toBeNull()
+    expect(document.querySelector('td[colspan="10"]')).not.toBeNull()
+    expect(document.querySelector('td[colspan="12"]')).toBeNull()
   })
 
   it('ADMIN in upload mode: sees the union of REGISTER and VALIDATOR columns', () => {
@@ -716,7 +728,9 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
     expect(mainHeaders()).toEqual([
       '',
       'Demarcación',
-      'Resumen Precandidatos',
+      'Detalles',
+      'Descargar Ejemplo',
+      'Descargar Formato',
       'Pre Candidatos',
       'Excel',
       'Eliminar',
@@ -752,24 +766,26 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
     )
   })
 
-  it('ADMIN in upload mode: expanded row uses colSpan 10', () => {
+  it('ADMIN in upload mode: expanded row uses colSpan 12', () => {
     setRole('ADMIN')
     renderTable([registeredRow])
 
     expandFirstRow()
 
-    expect(document.querySelector('td[colspan="10"]')).not.toBeNull()
-    expect(document.querySelector('td[colspan="8"]')).toBeNull()
+    expect(document.querySelector('td[colspan="12"]')).not.toBeNull()
+    expect(document.querySelector('td[colspan="10"]')).toBeNull()
   })
 
-  it('ADMIN in validate mode: also sees Excel and Eliminar (10 columns)', () => {
+  it('ADMIN in validate mode: also sees Excel and Eliminar (12 columns)', () => {
     setRole('ADMIN')
     renderTable([registeredRow], 'validate')
 
     expect(mainHeaders()).toEqual([
       '',
       'Demarcación',
-      'Resumen Precandidatos',
+      'Detalles',
+      'Descargar Ejemplo',
+      'Descargar Formato',
       'Pre Candidatos',
       'Excel',
       'Eliminar',
@@ -787,7 +803,9 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
     expect(mainHeaders()).toEqual([
       '',
       'Demarcación',
-      'Resumen Precandidatos',
+      'Detalles',
+      'Descargar Ejemplo',
+      'Descargar Formato',
       'Pre Candidatos',
       'Estatus',
       'Validar',
@@ -807,7 +825,7 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
   })
 })
 
-describe('DemarcacionTable - columna Resumen Precandidatos', () => {
+describe('DemarcacionTable - columna Detalles', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.useNavigate.mockReturnValue(vi.fn())
@@ -817,21 +835,21 @@ describe('DemarcacionTable - columna Resumen Precandidatos', () => {
     })
   })
 
-  it('renders the "Resumen Precandidatos" header right after "Demarcación"', () => {
+  it('renders the "Detalles" header right after "Demarcación"', () => {
     renderTable([registeredRow])
 
     const headers = screen.getAllByRole('columnheader').map((cell) => cell.textContent ?? '')
     expect(headers.indexOf('Demarcación')).toBe(1)
-    expect(headers[2]).toBe('Resumen Precandidatos')
+    expect(headers[2]).toBe('Detalles')
     expect(
-      screen.getByRole('columnheader', { name: 'Resumen Precandidatos' })
+      screen.getByRole('columnheader', { name: 'Detalles' })
     ).toBeInTheDocument()
   })
 
-  it('renders a Resumen link that opens the folio/alias route in a new tab', () => {
+  it('renders a Detalles link that opens the folio/alias route in a new tab', () => {
     renderTable([registeredRow])
 
-    const link = screen.getByRole('link', { name: 'Resumen' })
+    const link = screen.getByRole('link', { name: 'Detalles' })
     expect(link).toHaveAttribute(
       'href',
       '/dashboard/FOLIO-2026/demarcaciones/1A%20DEMARCACION'
@@ -849,6 +867,65 @@ describe('DemarcacionTable - columna Resumen Precandidatos', () => {
       .slice(1)
       .map((row) => within(row).getAllByRole('cell')[2]?.textContent ?? '')
     expect(cells).toEqual(['—'])
-    expect(screen.queryByRole('link', { name: 'Resumen' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Detalles' })).not.toBeInTheDocument()
+  })
+})
+
+describe('DemarcacionTable - Descargas por demarcación', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.useNavigate.mockReturnValue(vi.fn())
+    mocks.useAuth.mockReturnValue({
+      token: 'token123',
+      user: { role: 'ADMIN', userId: 1, username: 'admin' },
+    })
+  })
+
+  it.each(['upload', 'validate'] as const)(
+    'downloads the exact filenames and opens the same details link in %s mode',
+    async (mode) => {
+      mocks.isDemoFileAvailable.mockResolvedValue(true)
+      mocks.downloadDemoFileByName.mockResolvedValue(undefined)
+      const row = {
+        ...registeredRow,
+        catalogo: { ...registeredRow.catalogo, alias: 'AYTO AGUASCALIENTES' },
+      }
+
+      renderTable([row], mode)
+
+      const aliasLink = screen.getByRole('link', { name: 'AYTO AGUASCALIENTES' })
+      const detailsLink = screen.getByRole('link', { name: 'Detalles' })
+      expect(detailsLink).toHaveAttribute('href', aliasLink.getAttribute('href'))
+      expect(detailsLink).toHaveAttribute('target', '_blank')
+
+      const example = screen.getByRole('button', { name: 'Descargar Ejemplo' })
+      const template = screen.getByRole('button', { name: 'Descargar Formato' })
+      await waitFor(() => {
+        expect(example).toBeEnabled()
+        expect(template).toBeEnabled()
+      })
+      fireEvent.click(example)
+      fireEvent.click(template)
+
+      expect(mocks.downloadDemoFileByName).toHaveBeenCalledWith(
+        'token123',
+        'EJEMPLO LLENADO - AYTO AGUASCALIENTES.xlsx'
+      )
+      expect(mocks.downloadDemoFileByName).toHaveBeenCalledWith('token123', 'AYTO AGUASCALIENTES.xlsx')
+      await waitFor(() => expect(template).toBeEnabled())
+    }
+  )
+
+  it('disables only the missing file and keeps downloads available without a folio', async () => {
+    mocks.isDemoFileAvailable.mockImplementation(async (filename) => filename === 'GUBERNATURA.xlsx')
+    const row = {
+      ...unregisteredRow,
+      catalogo: { ...unregisteredRow.catalogo, demarcacion: 'GUBERNATURA' },
+    }
+    renderTable([row])
+
+    expect(await screen.findByRole('button', { name: 'No disponible' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Descargar Formato' })).toBeEnabled()
+    expect(screen.queryByRole('link', { name: 'Detalles' })).not.toBeInTheDocument()
   })
 })

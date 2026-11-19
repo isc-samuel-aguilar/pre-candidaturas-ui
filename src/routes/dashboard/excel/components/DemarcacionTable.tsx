@@ -22,6 +22,8 @@ import {
   Select,
   InputAdornment,
   IconButton,
+  Alert,
+  Snackbar,
 } from '@mui/material'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight'
@@ -34,7 +36,9 @@ import type { DemarcacionRow, DemarcacionStatus } from '../../../../types/demarc
 import { StatusEnum } from '../../../../types/enums'
 import { useAuth } from '../../../../contexts/AuthContext'
 import { PrecandidatosTable } from '../../../../components/PrecandidatosTable'
+import { demarcacionDemoFilename } from '../../../../services/demoFilesCatalog'
 import { DemarcacionDocumentsTable } from './DemarcacionDocumentsTable'
+import DemarcacionDownloadButton from './DemarcacionDownloadButton'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos' },
@@ -100,6 +104,7 @@ export function DemarcacionTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedDemarcacion, setSelectedDemarcacion] = useState<DemarcacionRow | null>(null)
   const [searchText, setSearchText] = useState('')
+  const [downloadError, setDownloadError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
   // Cada demarcacion guarda sus ramas abiertas en un Set: "Pre Candidatos" y
@@ -112,7 +117,7 @@ export function DemarcacionTable({
   // Refs de la fila principal de cada demarcacion (para el scroll al expandir)
   const rowRefs = useRef<Map<number, HTMLTableRowElement | null>>(new Map())
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, token } = useAuth()
 
   const isValidateMode = mode === 'validate'
   // Visibilidad de columnas por rol: ADMIN ve la union de REGISTER y VALIDATOR.
@@ -125,7 +130,7 @@ export function DemarcacionTable({
   const showValidateCols = isValidator || isAdmin
   // Cuadra celda por celda con la cabecera/cuerpo (y con el colSpan de la fila expandida)
   const totalColumns =
-    4 + // checkbox + Demarcación + Resumen Precandidatos + Pre Candidatos
+    6 + // checkbox + Demarcación + Detalles + example + template + Pre Candidatos
     (showUploadCols ? 3 : 0) + // Excel + Eliminar + Comentarios (REGISTER lectura / ADMIN edición)
     1 + // Estatus
     (showValidateCols ? 1 : 0) + // Validar
@@ -365,7 +370,9 @@ export function DemarcacionTable({
             <TableRow>
               <TableCell padding="checkbox" />
               <TableCell>Demarcación</TableCell>
-              <TableCell align="center">Resumen Precandidatos</TableCell>
+              <TableCell align="center">Detalles</TableCell>
+              <TableCell align="center">Descargar Ejemplo</TableCell>
+              <TableCell align="center">Descargar Formato</TableCell>
               <TableCell align="center">Pre Candidatos</TableCell>
               {showUploadCols && <TableCell align="center">Excel</TableCell>}
               {showUploadCols && <TableCell align="center">Eliminar</TableCell>}
@@ -382,6 +389,9 @@ export function DemarcacionTable({
               const hasStatus = row.status !== null
               const isUploading = uploadingIds.has(row.catalogo.id)
               const isExpanded = expandedRows.has(row.catalogo.id)
+              const label = getVisibleLabel(row)
+              const exampleFilename = demarcacionDemoFilename(label, 'example')
+              const templateFilename = demarcacionDemoFilename(label, 'clean')
 
               return (
                 <Fragment key={row.catalogo.id}>
@@ -448,11 +458,29 @@ export function DemarcacionTable({
                             textDecoration: 'none',
                           }}
                         >
-                          Resumen
+                          Detalles
                         </Link>
                       ) : (
                         '—'
                       )}
+                    </TableCell>
+                    <TableCell align="center">
+                      <DemarcacionDownloadButton
+                        key={exampleFilename}
+                        filename={exampleFilename}
+                        label="Descargar Ejemplo"
+                        token={token}
+                        onError={setDownloadError}
+                      />
+                    </TableCell>
+                    <TableCell align="center">
+                      <DemarcacionDownloadButton
+                        key={templateFilename}
+                        filename={templateFilename}
+                        label="Descargar Formato"
+                        token={token}
+                        onError={setDownloadError}
+                      />
                     </TableCell>
                     <TableCell align="center">
                       <Button
@@ -705,6 +733,16 @@ export function DemarcacionTable({
           </TableBody>
         </Table>
       </TableContainer>
+
+      <Snackbar
+        open={downloadError !== null}
+        autoHideDuration={6000}
+        onClose={() => setDownloadError(null)}
+      >
+        <Alert severity="error" onClose={() => setDownloadError(null)}>
+          {downloadError}
+        </Alert>
+      </Snackbar>
 
       <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>
         <DialogTitle>Confirmar eliminación</DialogTitle>
