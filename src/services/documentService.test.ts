@@ -21,6 +21,7 @@ import {
 } from './documentService'
 import type { DemarcationDocument, Documento, KeyValueCatalog } from '../types/demarcacion'
 import { StatusEnum } from '../types/enums'
+import * as fileViewer from '../utils/openOrDownloadFile'
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -420,7 +421,8 @@ describe('downloadDocumentFile', () => {
     vi.restoreAllMocks()
   })
 
-  it('downloads using the document download URL and bearer token', async () => {
+  it('opens the uploaded document using its download URL, bearer token and fallback name', async () => {
+    const openFile = vi.spyOn(fileViewer, 'openFileInNewTab')
     const fetchMock = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) => ({
         ok: true,
@@ -435,23 +437,17 @@ describe('downloadDocumentFile', () => {
     )
     ;(URL as { revokeObjectURL: (url: string) => void }).revokeObjectURL = vi.fn()
 
-    const anchors: HTMLAnchorElement[] = []
-    const originalCreateElement = document.createElement.bind(document)
-    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
-      const el = originalCreateElement(tagName)
-      if (tagName === 'a') anchors.push(el as HTMLAnchorElement)
-      return el
-    })
-
     await downloadDocumentFile(sampleDocument, 'token123')
 
+    expect(openFile).toHaveBeenCalledWith('INE', expect.any(Function))
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/\/documents\/10\/download$/),
       expect.objectContaining({
         headers: { Authorization: 'Bearer token123' },
       })
     )
-    expect(anchors[0]?.download).toBe('INE')
+    expect(window.open).toHaveBeenCalledWith('', '_blank')
+    expect(replace).toHaveBeenCalledWith('blob:mock')
   })
 
   it('opens an uploaded PDF using the original filename as a hint', async () => {

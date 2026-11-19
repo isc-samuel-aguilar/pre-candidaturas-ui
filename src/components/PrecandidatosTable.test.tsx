@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { PrecandidatosTable } from './PrecandidatosTable'
 import { StatusEnum } from '../types/enums'
@@ -929,6 +929,114 @@ describe('PrecandidatosTable - columna Acciones (edicion de precandidatos)', () 
 
   const editButton = () => screen.queryByRole('button', { name: 'Editar' })
   const deleteButton = () => screen.queryByRole('button', { name: 'Eliminar precandidato' })
+
+  it('aligns edit fields to one, two, or three columns including the gaps', async () => {
+    await renderTable({ mode: 'detail' })
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+
+    const form = screen.getByRole('group', { name: 'Campos del precandidato' })
+    const doubleLabels = [
+      'Cargo', 'Clave INE', 'OCR', 'CURP', 'Municipio Nacimiento', 'Estado Nacimiento',
+      'Ocupación', 'Calle', 'Colonia', 'Municipio Residencia', 'Estado Residencia',
+      'Lugar de Trabajo',
+    ]
+    const fields = Array.from(form.children)
+    const inputBox = (name: string) => {
+      const input = within(form).getByRole('textbox', { name })
+      const box = fields.find((field) => field.contains(input))
+      if (!box) throw new Error(`Missing edit field for ${name}`)
+      return box
+    }
+    const width = (box: Element) => parseFloat(getComputedStyle(box).flexBasis)
+    const gap = parseFloat(getComputedStyle(form).gap)
+    const baseWidth = width(inputBox('Código Postal'))
+
+    expect(baseWidth).toBe(136)
+    expect(gap).toBe(8)
+    const doubleFields = doubleLabels.map(inputBox)
+    const email = inputBox('Correo Electrónico')
+    for (const field of fields) {
+      expect(getComputedStyle(field).maxWidth).toBe('100%')
+      const columns = field === email ? 3 : doubleFields.includes(field) ? 2 : 1
+      expect(width(field)).toBe(baseWidth * columns + gap * (columns - 1))
+    }
+
+    expect(width(inputBox('Municipio Residencia'))).toBe(
+      width(inputBox('Puesto')) + gap + width(inputBox('Fecha Ingreso'))
+    )
+  })
+
+  it('wraps editing fields within the visible width and preserves focus, order and edits on resize', async () => {
+    const width = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(1320)
+    const disconnect = vi.fn()
+    let resize = () => {}
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(measure: () => void) {
+        resize = measure
+      }
+      observe = vi.fn()
+      disconnect = disconnect
+    })
+
+    try {
+      await renderTable({ mode: 'detail' })
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+
+      const formElement = screen.getByRole('group', { name: 'Campos del precandidato' })
+      const form = within(formElement)
+      const input = (name: string) => form.getByRole('textbox', { name })
+      const fields = form.getAllByRole('textbox')
+      const rfc = input('RFC Homoclave')
+      const email = input('Correo Electrónico')
+
+      expect(fields).toHaveLength(30)
+      expect(fields[8]).toBe(rfc)
+      expect(fields[29]).toBe(email)
+      expect(formElement).toHaveStyle({ display: 'flex', flexWrap: 'wrap', width: '1320px' })
+      expect(getComputedStyle(formElement).overflowX).not.toBe('auto')
+      fireEvent.change(rfc, { target: { value: 'LORM880101AB2' } })
+      fireEvent.change(email, { target: { value: 'updated@example.com' } })
+      act(() => email.focus())
+
+      width.mockReturnValue(320)
+      act(resize)
+
+      expect(formElement).toHaveStyle({ flexWrap: 'wrap', width: '320px' })
+      expect(form.getAllByRole('textbox').every((field, index) => field === fields[index])).toBe(true)
+      expect(email).toHaveFocus()
+      expect(rfc).toHaveValue('LORM880101AB2')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+      await waitFor(() => {
+        expect(mocks.updatePreCandidato).toHaveBeenCalledWith(
+          1, 'ASIENTOS', 7, expect.objectContaining({
+            rfcHomoclave: 'LORM880101AB2',
+            correoElectronico: 'updated@example.com',
+          })
+        )
+      })
+      expect(disconnect).toHaveBeenCalled()
+    } finally {
+      width.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('places Acciones before Nombre Completo and after the document expander', async () => {
+    await renderTable({ mode: 'detail' })
+
+    const [, actionsHeader, nameHeader] = screen.getAllByRole('columnheader')
+    expect(actionsHeader).toHaveTextContent('Acciones')
+    expect(nameHeader).toHaveTextContent('Nombre Completo')
+
+    const edit = screen.getByRole('button', { name: 'Editar' })
+    const remove = screen.getByRole('button', { name: 'Eliminar precandidato' })
+    const candidateRow = edit.closest('tr')
+    if (!candidateRow) throw new Error('Expected the edit button in a candidate row')
+    const [, actionsCell] = within(candidateRow).getAllByRole('cell')
+    expect(actionsCell).toContainElement(edit)
+    expect(actionsCell).toContainElement(remove)
+  })
 
   it('shows the Acciones header only in detail mode', async () => {
     const { unmount } = render(

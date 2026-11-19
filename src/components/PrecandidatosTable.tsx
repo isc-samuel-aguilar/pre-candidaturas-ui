@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { Fragment, useState, useEffect, useCallback, useRef } from 'react'
 import {
   Box,
   Typography,
@@ -47,6 +47,7 @@ import { useAuth } from '../contexts/AuthContext'
 import type { Precandidato, DemarcacionStatus, Documento, KeyValueCatalog } from '../types/demarcacion'
 import { StatusEnum } from '../types/enums'
 import { validateFile, isImageFile, compressImage } from '../utils/fileUtils'
+import PrecandidatoEditRows from './PrecandidatoEditRows'
 
 interface DocumentRow {
   catalogType: string
@@ -59,42 +60,42 @@ interface DocEditState {
   saving: boolean
 }
 
-// Los 30 campos editables del precandidato (mismo orden/nombres que el contrato
-// backend; `homoclave` del tipo UI se envia como `rfcHomoclave` en el payload)
+// The edit form follows the table column order.
 const EDITABLE_PRECANDIDATO_FIELDS = [
-  'cargo',
-  'calidad',
-  'genero',
-  'accionAfirmativa',
-  'internoExterno',
-  'apellidoPaterno',
-  'apellidoMaterno',
-  'nombre',
-  'claveIfe',
-  'ocr',
-  'curp',
-  'homoclave',
-  'municipioDondeNacio',
-  'estadoDondeNacio',
-  'ocupacion',
-  'calleDondeVive',
-  'numeroDondeVive',
-  'coloniaDondeVive',
-  'municipioDondeVive',
-  'estadoDondeVive',
-  'codigoPostal',
-  'tiempoDeResidenciaEnDomicilio',
-  'telefono',
-  'correoElectronico',
-  'escolaridad',
-  'carrera',
-  'lugarDondeTrabaja',
-  'puestoEnSuTrabajo',
-  'fechaIngresoTrabajo',
-  'fechaTerminacionTrabajo',
+  ['apellidoPaterno', 'Apellido Paterno'],
+  ['apellidoMaterno', 'Apellido Materno'],
+  ['nombre', 'Nombre'],
+  ['cargo', 'Cargo', 2],
+  ['calidad', 'Calidad'],
+  ['claveIfe', 'Clave INE', 2],
+  ['ocr', 'OCR', 2],
+  ['curp', 'CURP', 2],
+  ['homoclave', 'RFC Homoclave'],
+  ['accionAfirmativa', 'Acción Afirmativa'],
+  ['internoExterno', 'Interno/Externo'],
+  ['municipioDondeNacio', 'Municipio Nacimiento', 2],
+  ['estadoDondeNacio', 'Estado Nacimiento', 2],
+  ['ocupacion', 'Ocupación', 2],
+  ['calleDondeVive', 'Calle', 2],
+  ['numeroDondeVive', 'Número'],
+  ['coloniaDondeVive', 'Colonia', 2],
+  ['municipioDondeVive', 'Municipio Residencia', 2],
+  ['estadoDondeVive', 'Estado Residencia', 2],
+  ['codigoPostal', 'Código Postal'],
+  ['tiempoDeResidenciaEnDomicilio', 'Tiempo Residencia'],
+  ['genero', 'Género'],
+  ['escolaridad', 'Escolaridad'],
+  ['carrera', 'Carrera'],
+  ['lugarDondeTrabaja', 'Lugar de Trabajo', 2],
+  ['puestoEnSuTrabajo', 'Puesto'],
+  ['fechaIngresoTrabajo', 'Fecha Ingreso'],
+  ['fechaTerminacionTrabajo', 'Fecha Terminación'],
+  ['telefono', 'Teléfono'],
+  ['correoElectronico', 'Correo Electrónico', 3],
 ] as const
 
-type EditablePrecandidatoField = (typeof EDITABLE_PRECANDIDATO_FIELDS)[number]
+type EditablePrecandidatoInput = (typeof EDITABLE_PRECANDIDATO_FIELDS)[number]
+type EditablePrecandidatoField = EditablePrecandidatoInput[0]
 
 // @NotBlank del backend: sin estos campos el PUT falla, asi que se valida en la UI
 const REQUIRED_PRECANDIDATO_FIELDS: readonly EditablePrecandidatoField[] = [
@@ -240,6 +241,7 @@ export function PrecandidatosTable({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [docsErrorIds, setDocsErrorIds] = useState<Set<number>>(new Set())
   const [docEdits, setDocEdits] = useState<Map<string, DocEditState>>(new Map())
+  const tableViewportRef = useRef<HTMLDivElement>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editValues, setEditValues] = useState<Record<string, string>>({})
   const [editFieldErrors, setEditFieldErrors] = useState<Record<string, boolean>>({})
@@ -512,7 +514,7 @@ export function PrecandidatosTable({
   const startEditPrecandidato = (p: Precandidato) => {
     if (p.id == null) return
     const values: Record<string, string> = {}
-    for (const field of EDITABLE_PRECANDIDATO_FIELDS) {
+    for (const [field] of EDITABLE_PRECANDIDATO_FIELDS) {
       values[field] = p[field] ?? ''
     }
     setEditValues(values)
@@ -594,19 +596,23 @@ export function PrecandidatosTable({
     }
   }
 
-  const renderEditInput = (field: EditablePrecandidatoField, label: string) => (
-    <TextField
-      size="small"
-      fullWidth
-      label={label}
-      value={editValues[field] ?? ''}
-      error={Boolean(editFieldErrors[field])}
-      helperText={editFieldErrors[field] ? 'Campo obligatorio' : undefined}
-      disabled={savingPrecandidato}
-      onChange={(e) => patchEditValue(field, e.target.value)}
-      sx={{ minWidth: 110 }}
-    />
-  )
+  const createEditField = ([field, label, columns]: EditablePrecandidatoInput) => ({
+    id: field,
+    columns: columns ?? 1,
+    input: (
+      <TextField
+        size="small"
+        fullWidth
+        label={label}
+        value={editValues[field] ?? ''}
+        error={Boolean(editFieldErrors[field])}
+        helperText={editFieldErrors[field] ? 'Campo obligatorio' : undefined}
+        disabled={savingPrecandidato}
+        onChange={(e) => patchEditValue(field, e.target.value)}
+        InputLabelProps={{ shrink: true }}
+      />
+    ),
+  })
 
   if (loading) {
     return (
@@ -639,7 +645,7 @@ export function PrecandidatosTable({
   const isDetailMode = mode === 'detail'
   // 10 (excel) / 31 (detail): coincide con el nº real de celdas desde que se añadió
   // "Docs Válidos" (antes había drift: 9/29 celdas frente a colSpan 10/30) y la
-  // columna final "Acciones" (edición inline / borrado de precandidatos)
+  // columna "Acciones" (edición inline / borrado de precandidatos)
   const totalColumns = isDetailMode ? 31 : 10
 
   const getDocColumnWeights = (section: DocSection): number[] => {
@@ -1016,11 +1022,12 @@ export function PrecandidatosTable({
           {uploadError}
         </Alert>
       )}
-      <TableContainer component={Paper} variant="outlined">
+      <TableContainer ref={tableViewportRef} component={Paper} variant="outlined">
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox" />
+              {isDetailMode && <TableCell align="center">Acciones</TableCell>}
               <TableCell>Nombre Completo</TableCell>
               <TableCell>Cargo</TableCell>
               <TableCell>Calidad</TableCell>
@@ -1054,7 +1061,6 @@ export function PrecandidatosTable({
               )}
               <TableCell>Teléfono</TableCell>
               <TableCell>Correo Electrónico</TableCell>
-              {isDetailMode && <TableCell align="center">Acciones</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -1068,11 +1074,11 @@ export function PrecandidatosTable({
               const loadedDocs = p.loadedDocsCount
               const totalDocs = documentTypes.length
               const docsValidStyle = getDocsValidColor(validDocs, totalDocs)
-              const isEditingRow = editingId === precandidatoId
+              const isEditingRow = isDetailMode && canEditPrecandidatos && editingId === precandidatoId
 
               return (
-                <>
-                  <TableRow key={precandidatoId} hover>
+                <Fragment key={precandidatoId}>
+                  <TableRow hover>
                     <TableCell padding="checkbox">
                       <IconButton
                         size="small"
@@ -1081,148 +1087,6 @@ export function PrecandidatosTable({
                       >
                         {isExpanded ? <KeyboardArrowDownIcon /> : <KeyboardArrowRightIcon />}
                       </IconButton>
-                    </TableCell>
-                    <TableCell>
-                      {isEditingRow ? (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          {renderEditInput('apellidoPaterno', 'Apellido Paterno')}
-                          {renderEditInput('apellidoMaterno', 'Apellido Materno')}
-                          {renderEditInput('nombre', 'Nombre')}
-                        </Box>
-                      ) : (
-                        formatFullName(p)
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {isEditingRow ? renderEditInput('cargo', 'Cargo') : p.cargo}
-                    </TableCell>
-                    <TableCell>
-                      {isEditingRow ? renderEditInput('calidad', 'Calidad') : p.calidad}
-                    </TableCell>
-                    <TableCell
-                      style={{
-                        backgroundColor: docsValidStyle.bg,
-                        color: docsValidStyle.color,
-                        fontWeight: 500,
-                      }}
-                    >
-                      {loadedDocs != null
-                        ? `${loadedDocs} / ${validDocs} / ${totalDocs}`
-                        : `— / ${validDocs} / ${totalDocs}`}
-                    </TableCell>
-                    <TableCell>
-                      {isEditingRow ? renderEditInput('claveIfe', 'Clave INE') : p.claveIfe}
-                    </TableCell>
-                    {isDetailMode && (
-                      <TableCell>
-                        {isEditingRow ? renderEditInput('ocr', 'OCR') : p.ocr}
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      {isEditingRow ? renderEditInput('curp', 'CURP') : p.curp}
-                    </TableCell>
-                    <TableCell>
-                      {isEditingRow ? renderEditInput('homoclave', 'RFC Homoclave') : p.homoclave}
-                    </TableCell>
-                    {isDetailMode && (
-                      <>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('accionAfirmativa', 'Acción Afirmativa')
-                            : p.accionAfirmativa}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('internoExterno', 'Interno/Externo')
-                            : p.internoExterno}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('municipioDondeNacio', 'Municipio Nacimiento')
-                            : p.municipioDondeNacio}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('estadoDondeNacio', 'Estado Nacimiento')
-                            : p.estadoDondeNacio}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow ? renderEditInput('ocupacion', 'Ocupación') : p.ocupacion}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow ? renderEditInput('calleDondeVive', 'Calle') : p.calleDondeVive}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('numeroDondeVive', 'Número')
-                            : p.numeroDondeVive}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('coloniaDondeVive', 'Colonia')
-                            : p.coloniaDondeVive}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('municipioDondeVive', 'Municipio Residencia')
-                            : p.municipioDondeVive}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('estadoDondeVive', 'Estado Residencia')
-                            : p.estadoDondeVive}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('codigoPostal', 'Código Postal')
-                            : p.codigoPostal}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput(
-                                'tiempoDeResidenciaEnDomicilio',
-                                'Tiempo Residencia'
-                              )
-                            : p.tiempoDeResidenciaEnDomicilio}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow ? renderEditInput('genero', 'Género') : p.genero}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow ? renderEditInput('escolaridad', 'Escolaridad') : p.escolaridad}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow ? renderEditInput('carrera', 'Carrera') : p.carrera}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('lugarDondeTrabaja', 'Lugar de Trabajo')
-                            : p.lugarDondeTrabaja}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('puestoEnSuTrabajo', 'Puesto')
-                            : p.puestoEnSuTrabajo}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('fechaIngresoTrabajo', 'Fecha Ingreso')
-                            : p.fechaIngresoTrabajo}
-                        </TableCell>
-                        <TableCell>
-                          {isEditingRow
-                            ? renderEditInput('fechaTerminacionTrabajo', 'Fecha Terminación')
-                            : p.fechaTerminacionTrabajo}
-                        </TableCell>
-                      </>
-                    )}
-                    <TableCell>
-                      {isEditingRow ? renderEditInput('telefono', 'Teléfono') : p.telefono}
-                    </TableCell>
-                    <TableCell>
-                      {isEditingRow
-                        ? renderEditInput('correoElectronico', 'Correo Electrónico')
-                        : p.correoElectronico}
                     </TableCell>
                     {isDetailMode && (
                       <TableCell align="center">
@@ -1269,9 +1133,62 @@ export function PrecandidatosTable({
                         ) : null}
                       </TableCell>
                     )}
+                    <TableCell>{formatFullName(p)}</TableCell>
+                    <TableCell>{p.cargo}</TableCell>
+                    <TableCell>{p.calidad}</TableCell>
+                    <TableCell
+                      style={{
+                        backgroundColor: docsValidStyle.bg,
+                        color: docsValidStyle.color,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {loadedDocs != null
+                        ? `${loadedDocs} / ${validDocs} / ${totalDocs}`
+                        : `— / ${validDocs} / ${totalDocs}`}
+                    </TableCell>
+                    <TableCell>{p.claveIfe}</TableCell>
+                    {isDetailMode && <TableCell>{p.ocr}</TableCell>}
+                    <TableCell>{p.curp}</TableCell>
+                    <TableCell>{p.homoclave}</TableCell>
+                    {isDetailMode && (
+                      <>
+                        <TableCell>{p.accionAfirmativa}</TableCell>
+                        <TableCell>{p.internoExterno}</TableCell>
+                        <TableCell>{p.municipioDondeNacio}</TableCell>
+                        <TableCell>{p.estadoDondeNacio}</TableCell>
+                        <TableCell>{p.ocupacion}</TableCell>
+                        <TableCell>{p.calleDondeVive}</TableCell>
+                        <TableCell>{p.numeroDondeVive}</TableCell>
+                        <TableCell>{p.coloniaDondeVive}</TableCell>
+                        <TableCell>{p.municipioDondeVive}</TableCell>
+                        <TableCell>{p.estadoDondeVive}</TableCell>
+                        <TableCell>{p.codigoPostal}</TableCell>
+                        <TableCell>{p.tiempoDeResidenciaEnDomicilio}</TableCell>
+                        <TableCell>{p.genero}</TableCell>
+                        <TableCell>{p.escolaridad}</TableCell>
+                        <TableCell>{p.carrera}</TableCell>
+                        <TableCell>{p.lugarDondeTrabaja}</TableCell>
+                        <TableCell>{p.puestoEnSuTrabajo}</TableCell>
+                        <TableCell>{p.fechaIngresoTrabajo}</TableCell>
+                        <TableCell>{p.fechaTerminacionTrabajo}</TableCell>
+                      </>
+                    )}
+                    <TableCell>{p.telefono}</TableCell>
+                    <TableCell>{p.correoElectronico}</TableCell>
                   </TableRow>
+                  {isEditingRow && (
+                    <TableRow>
+                      <TableCell colSpan={totalColumns} sx={{ p: 0 }}>
+                        <PrecandidatoEditRows
+                          viewportRef={tableViewportRef}
+                          fields={EDITABLE_PRECANDIDATO_FIELDS.map(createEditField)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
                   {isExpanded && (
-                    <TableRow key={`${precandidatoId}-expanded`}>
+                    <TableRow>
                       <TableCell colSpan={totalColumns} sx={{ p: 0, backgroundColor: '#f5f5f5' }}>
                         {/* Sin altura maxima: el contenido expandido crece lo necesario
                             y el unico scroll es el general de la pagina */}
@@ -1293,7 +1210,7 @@ export function PrecandidatosTable({
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </Fragment>
               )
             })}
           </TableBody>
