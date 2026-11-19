@@ -35,7 +35,7 @@ export const DEMO_FILES_CATALOG: readonly DemoFileEntry[] = [
   {
     id: 'diputado-rp',
     label: 'DIPUTADO RP',
-    exampleFilename: 'EJEMPLO LLENADO - DIP RP.xlsx',
+    exampleFilename: 'EJEMPLO LLENADO - DIPUTADO RP.xlsx',
     cleanFilename: 'DIPUTADO RP.xlsx',
   },
   {

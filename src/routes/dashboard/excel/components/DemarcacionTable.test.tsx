@@ -677,6 +677,7 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
     expect(mainHeaders()).toEqual([
       '',
       'Demarcación',
+      'Resumen Precandidatos',
       'Pre Candidatos',
       'Excel',
       'Eliminar',
@@ -698,14 +699,14 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
     expect(screen.getByText('—')).toBeInTheDocument()
   })
 
-  it('REGISTER: expanded row uses colSpan 7', () => {
+  it('REGISTER: expanded row uses colSpan 8', () => {
     setRole('REGISTER')
     renderTable([registeredRow])
 
     expandFirstRow()
 
-    expect(document.querySelector('td[colspan="7"]')).not.toBeNull()
-    expect(document.querySelector('td[colspan="9"]')).toBeNull()
+    expect(document.querySelector('td[colspan="8"]')).not.toBeNull()
+    expect(document.querySelector('td[colspan="10"]')).toBeNull()
   })
 
   it('ADMIN in upload mode: sees the union of REGISTER and VALIDATOR columns', () => {
@@ -715,6 +716,7 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
     expect(mainHeaders()).toEqual([
       '',
       'Demarcación',
+      'Resumen Precandidatos',
       'Pre Candidatos',
       'Excel',
       'Eliminar',
@@ -750,23 +752,24 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
     )
   })
 
-  it('ADMIN in upload mode: expanded row uses colSpan 9', () => {
+  it('ADMIN in upload mode: expanded row uses colSpan 10', () => {
     setRole('ADMIN')
     renderTable([registeredRow])
 
     expandFirstRow()
 
-    expect(document.querySelector('td[colspan="9"]')).not.toBeNull()
-    expect(document.querySelector('td[colspan="7"]')).toBeNull()
+    expect(document.querySelector('td[colspan="10"]')).not.toBeNull()
+    expect(document.querySelector('td[colspan="8"]')).toBeNull()
   })
 
-  it('ADMIN in validate mode: also sees Excel and Eliminar (9 columns)', () => {
+  it('ADMIN in validate mode: also sees Excel and Eliminar (10 columns)', () => {
     setRole('ADMIN')
     renderTable([registeredRow], 'validate')
 
     expect(mainHeaders()).toEqual([
       '',
       'Demarcación',
+      'Resumen Precandidatos',
       'Pre Candidatos',
       'Excel',
       'Eliminar',
@@ -784,6 +787,7 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
     expect(mainHeaders()).toEqual([
       '',
       'Demarcación',
+      'Resumen Precandidatos',
       'Pre Candidatos',
       'Estatus',
       'Validar',
@@ -800,5 +804,51 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
 
     expect(screen.getAllByText('Estatus').length).toBeGreaterThan(0)
     expect(screen.queryByText('Status')).not.toBeInTheDocument()
+  })
+})
+
+describe('DemarcacionTable - columna Resumen Precandidatos', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.useNavigate.mockReturnValue(vi.fn())
+    mocks.useAuth.mockReturnValue({
+      token: 'token123',
+      user: { role: 'ADMIN', userId: 1, username: 'admin' },
+    })
+  })
+
+  it('renders the "Resumen Precandidatos" header right after "Demarcación"', () => {
+    renderTable([registeredRow])
+
+    const headers = screen.getAllByRole('columnheader').map((cell) => cell.textContent ?? '')
+    expect(headers.indexOf('Demarcación')).toBe(1)
+    expect(headers[2]).toBe('Resumen Precandidatos')
+    expect(
+      screen.getByRole('columnheader', { name: 'Resumen Precandidatos' })
+    ).toBeInTheDocument()
+  })
+
+  it('renders a Resumen link that opens the folio/alias route in a new tab', () => {
+    renderTable([registeredRow])
+
+    const link = screen.getByRole('link', { name: 'Resumen' })
+    expect(link).toHaveAttribute(
+      'href',
+      '/dashboard/FOLIO-2026/demarcaciones/1A%20DEMARCACION'
+    )
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'opener')
+    expect(link).toHaveAttribute('data-to', '/dashboard/$folio/demarcaciones/$alias')
+  })
+
+  it('renders an em dash and no link when the row has no folioDemarcacion', () => {
+    renderTable([unregisteredRow])
+
+    const cells = screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getAllByRole('cell')[2]?.textContent ?? '')
+    expect(cells).toEqual(['—'])
+    expect(screen.queryByRole('link', { name: 'Resumen' })).not.toBeInTheDocument()
   })
 })

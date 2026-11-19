@@ -43,7 +43,7 @@ describe('demo files catalog', () => {
       ['EJEMPLO LLENADO - AYTOS MAS DE 30 HAB.xlsx', 'AYTOS MAS DE 30 HAB.xlsx'],
       ['EJEMPLO LLENADO - AYTOS MENOS DE 30 HAB.xlsx', 'AYTOS MENOS DE 30 HAB.xlsx'],
       ['EJEMPLO LLENADO - DIP MR.xlsx', 'DIPUTADO MR.xlsx'],
-      ['EJEMPLO LLENADO - DIP RP.xlsx', 'DIPUTADO RP.xlsx'],
+      ['EJEMPLO LLENADO - DIPUTADO RP.xlsx', 'DIPUTADO RP.xlsx'],
       ['EJEMPLO LLENADO - GUBERNATURA.xlsx', 'GUBERNATURA.xlsx'],
     ])
   })

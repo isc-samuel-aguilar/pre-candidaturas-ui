@@ -7,6 +7,8 @@ import type { Documento, Precandidato } from '../types/demarcacion'
 
 const mocks = vi.hoisted(() => ({
   getPrecandidatos: vi.fn(),
+  updatePreCandidato: vi.fn(),
+  deletePreCandidato: vi.fn(),
   getDocumentsByPrecandidato: vi.fn(),
   getDocumentTypes: vi.fn(),
   uploadDocument: vi.fn(),
@@ -20,6 +22,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../services/demarcacionService', () => ({
   getPrecandidatos: mocks.getPrecandidatos,
+  updatePreCandidato: mocks.updatePreCandidato,
+  deletePreCandidato: mocks.deletePreCandidato,
 }))
 
 vi.mock('../services/documentService', () => ({
@@ -909,5 +913,111 @@ describe('PrecandidatosTable - columna Descargar y/o Firmar', () => {
     }
     expect(node).toBe(container)
     expect(checked).toBeGreaterThan(0)
+  })
+})
+
+describe('PrecandidatosTable - columna Acciones (edicion de precandidatos)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'VALIDATOR' } })
+    mocks.getPrecandidatos.mockResolvedValue([precandidato])
+    mocks.getDocumentTypes.mockResolvedValue(documentTypes)
+    mocks.getDocumentsByPrecandidato.mockResolvedValue([documentFixture])
+    mocks.updatePreCandidato.mockResolvedValue(undefined)
+    mocks.deletePreCandidato.mockResolvedValue(undefined)
+  })
+
+  const editButton = () => screen.queryByRole('button', { name: 'Editar' })
+  const deleteButton = () => screen.queryByRole('button', { name: 'Eliminar precandidato' })
+
+  it('shows the Acciones header only in detail mode', async () => {
+    const { unmount } = render(
+      <PrecandidatosTable
+        folioId={1}
+        demarcacionName="ASIENTOS"
+        demarcacionStatus={StatusEnum.VALIDO}
+        mode="detail"
+      />
+    )
+    expect(
+      await screen.findByRole('columnheader', { name: 'Acciones' })
+    ).toBeInTheDocument()
+    unmount()
+
+    await renderTable()
+    expect(
+      screen.queryByRole('columnheader', { name: 'Acciones' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('hides the edit and delete buttons for REGISTER when the demarcacion is VALIDO', async () => {
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'REGISTER' } })
+
+    await renderTable({ mode: 'detail', demarcacionStatus: StatusEnum.VALIDO })
+
+    expect(editButton()).not.toBeInTheDocument()
+    expect(deleteButton()).not.toBeInTheDocument()
+  })
+
+  it('shows the edit and delete buttons for REGISTER when the demarcacion is not VALIDO', async () => {
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'REGISTER' } })
+
+    await renderTable({ mode: 'detail', demarcacionStatus: StatusEnum.POR_VALIDAR })
+
+    expect(editButton()).toBeInTheDocument()
+    expect(deleteButton()).toBeInTheDocument()
+  })
+
+  it('shows the edit and delete buttons for ADMIN regardless of the demarcacion status', async () => {
+    mocks.useAuth.mockReturnValue({ token: 'token', user: { role: 'ADMIN' } })
+
+    await renderTable({ mode: 'detail', demarcacionStatus: StatusEnum.VALIDO })
+
+    expect(editButton()).toBeInTheDocument()
+    expect(deleteButton()).toBeInTheDocument()
+  })
+
+  it('saves the edited precandidato mapping homoclave to rfcHomoclave', async () => {
+    await renderTable({ mode: 'detail' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+
+    expect(screen.getByLabelText('Cargo')).toHaveValue('Regiduria')
+    expect(screen.getByLabelText('Apellido Paterno')).toHaveValue('Lopez')
+    expect(screen.getByLabelText('Nombre')).toHaveValue('Maria')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    await waitFor(() =>
+      expect(mocks.updatePreCandidato).toHaveBeenCalledWith(
+        1,
+        'ASIENTOS',
+        7,
+        expect.objectContaining({
+          cargo: 'Regiduria',
+          apellidoPaterno: 'Lopez',
+          nombre: 'Maria',
+        })
+      )
+    )
+
+    const payload = mocks.updatePreCandidato.mock.calls[0]?.[3] as Record<string, unknown>
+    expect(payload.rfcHomoclave).toBe('LORM880101AA1')
+    expect(payload).not.toHaveProperty('homoclave')
+  })
+
+  it('deletes the precandidato after confirming', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    try {
+      await renderTable({ mode: 'detail' })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Eliminar precandidato' }))
+
+      await waitFor(() =>
+        expect(mocks.deletePreCandidato).toHaveBeenCalledWith(1, 'ASIENTOS', 7)
+      )
+    } finally {
+      confirmSpy.mockRestore()
+    }
   })
 })

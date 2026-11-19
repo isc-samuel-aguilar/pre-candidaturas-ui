@@ -158,3 +158,69 @@ export async function getPrecandidatos(
     throw mapApiError(error as ApiError)
   }
 }
+
+// Body = los 30 campos String del contrato backend
+// (PUT /api/v1/folios/{folioId}/demarcaciones/{demarcacionName}/precandidatos/{id})
+export interface UpdatePrecandidatoRequest {
+  cargo: string
+  calidad: string
+  genero: string
+  accionAfirmativa: string
+  internoExterno: string
+  apellidoPaterno: string
+  apellidoMaterno: string
+  nombre: string
+  claveIfe: string
+  ocr: string
+  curp: string
+  rfcHomoclave: string
+  municipioDondeNacio: string
+  estadoDondeNacio: string
+  ocupacion: string
+  calleDondeVive: string
+  numeroDondeVive: string
+  coloniaDondeVive: string
+  municipioDondeVive: string
+  estadoDondeVive: string
+  codigoPostal: string
+  tiempoDeResidenciaEnDomicilio: string
+  telefono: string
+  correoElectronico: string
+  escolaridad: string
+  carrera: string
+  lugarDondeTrabaja: string
+  puestoEnSuTrabajo: string
+  fechaIngresoTrabajo: string
+  fechaTerminacionTrabajo: string
+}
+
+export async function updatePreCandidato(
+  folioId: number,
+  demarcacionName: string,
+  id: number,
+  dto: UpdatePrecandidatoRequest
+): Promise<Precandidato> {
+  try {
+    const response = await apiClient.put<Precandidato>(
+      `/folios/${folioId}/demarcaciones/${encodeURIComponent(demarcacionName)}/precandidatos/${id}`,
+      dto
+    )
+    return response.data
+  } catch (error) {
+    throw mapApiError(error as ApiError)
+  }
+}
+
+export async function deletePreCandidato(
+  folioId: number,
+  demarcacionName: string,
+  id: number
+): Promise<void> {
+  try {
+    await apiClient.delete(
+      `/folios/${folioId}/demarcaciones/${encodeURIComponent(demarcacionName)}/precandidatos/${id}`
+    )
+  } catch (error) {
+    throw mapApiError(error as ApiError)
+  }
+}

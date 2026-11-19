@@ -1,4 +1,4 @@
-import { openOrDownloadFile } from '../utils/openOrDownloadFile'
+import { openFileInNewTab } from '../utils/openOrDownloadFile'
 import { apiClient, type ApiError } from './apiClient'
 import type { DemarcationDocument, Documento, KeyValueCatalog } from '../types/demarcacion'
 import type { StatusEnum } from '../types/enums'
@@ -160,7 +160,7 @@ export async function updateDocumentStatus(
 export async function downloadDocumentFile(doc: Documento, token: string): Promise<void> {
   const apiUrl = import.meta.env.VITE_API_URL
 
-  await openOrDownloadFile(doc.originalFilename || doc.keyValueCatalogValue, async () => {
+  await openFileInNewTab(doc.originalFilename || doc.keyValueCatalogValue, async () => {
     const response = await fetch(
       `${apiUrl}/documents/${doc.id}/download`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -210,7 +210,7 @@ export async function generateDocumentForSign(
 ): Promise<void> {
   const apiUrl = import.meta.env.VITE_API_URL
 
-  await openOrDownloadFile(`${documento}.pdf`, async () => {
+  await openFileInNewTab(`${documento}.pdf`, async () => {
     const response = await fetch(
       `${apiUrl}/documents/pre-candidatos/${preCandidatoId}/generated?documento=${encodeURIComponent(documento)}`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -321,7 +321,7 @@ export async function downloadDemarcationDocumentFile(
 ): Promise<void> {
   const apiUrl = import.meta.env.VITE_API_URL
 
-  await openOrDownloadFile(doc.originalFilename || doc.keyValueCatalogValue, async () => {
+  await openFileInNewTab(doc.originalFilename || doc.keyValueCatalogValue, async () => {
     const response = await fetch(
       `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/${doc.id}/download`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -365,7 +365,7 @@ export async function generateDemarcationDocument(
 ): Promise<void> {
   const apiUrl = import.meta.env.VITE_API_URL
 
-  await openOrDownloadFile(`${documento}.pdf`, async () => {
+  await openFileInNewTab(`${documento}.pdf`, async () => {
     const response = await fetch(
       `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/generated-v2?documento=${encodeURIComponent(documento)}`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -386,7 +386,7 @@ export async function downloadGeneratedDemarcationDocument(
 ): Promise<void> {
   const apiUrl = import.meta.env.VITE_API_URL
 
-  await openOrDownloadFile(`${documento}.pdf`, async () => {
+  await openFileInNewTab(`${documento}.pdf`, async () => {
     const response = await fetch(
       `${apiUrl}${demarcationDocumentsPath(folioId, fdmId)}/generated?documento=${encodeURIComponent(documento)}`,
       { headers: { Authorization: `Bearer ${token}` } }

@@ -125,7 +125,7 @@ export function DemarcacionTable({
   const showValidateCols = isValidator || isAdmin
   // Cuadra celda por celda con la cabecera/cuerpo (y con el colSpan de la fila expandida)
   const totalColumns =
-    3 + // checkbox + Demarcación + Pre Candidatos
+    4 + // checkbox + Demarcación + Resumen Precandidatos + Pre Candidatos
     (showUploadCols ? 3 : 0) + // Excel + Eliminar + Comentarios (REGISTER lectura / ADMIN edición)
     1 + // Estatus
     (showValidateCols ? 1 : 0) + // Validar
@@ -365,6 +365,7 @@ export function DemarcacionTable({
             <TableRow>
               <TableCell padding="checkbox" />
               <TableCell>Demarcación</TableCell>
+              <TableCell align="center">Resumen Precandidatos</TableCell>
               <TableCell align="center">Pre Candidatos</TableCell>
               {showUploadCols && <TableCell align="center">Excel</TableCell>}
               {showUploadCols && <TableCell align="center">Eliminar</TableCell>}
@@ -423,6 +424,34 @@ export function DemarcacionTable({
                         </Link>
                       ) : (
                         row.catalogo.alias || row.catalogo.demarcacion
+                      )}
+                    </TableCell>
+                    <TableCell align="center">
+                      {row.folioDemarcacion ? (
+                        <Link
+                          to="/dashboard/$folio/demarcaciones/$alias"
+                          params={{
+                            folio: row.folioDemarcacion.folio,
+                            alias: row.catalogo.alias || row.catalogo.demarcacion,
+                          }}
+                          target="_blank"
+                          rel="opener"
+                          style={{
+                            display: 'inline-block',
+                            border: '1px solid #003366',
+                            borderRadius: 4,
+                            padding: '3px 12px',
+                            fontSize: '0.8125rem',
+                            fontWeight: 500,
+                            lineHeight: 1.75,
+                            color: '#003366',
+                            textDecoration: 'none',
+                          }}
+                        >
+                          Resumen
+                        </Link>
+                      ) : (
+                        '—'
                       )}
                     </TableCell>
                     <TableCell align="center">

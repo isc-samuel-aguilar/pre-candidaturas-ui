@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
 import { useAuth } from '../contexts/AuthContext'
 import { ThemeToggle } from '../components/ThemeToggle'
+import PasswordField from '../components/PasswordField'
 import { resolvePostLoginRoute } from '../utils/redirect'
 import type { RouterContext } from '../main'
 
@@ -126,15 +127,12 @@ function LoginPage() {
               autoFocus
               disabled={isLockedOut || loading}
             />
-            <TextField
+            <PasswordField
               fullWidth
-              label="Contraseña"
-              type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
               margin="normal"
               required
-              autoComplete="current-password"
               disabled={isLockedOut || loading}
             />
 
