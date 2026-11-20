@@ -689,7 +689,7 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
       'Demarcación',
       'Detalles',
       'Descargar Ejemplo',
-      'Descargar Formato',
+      'Archivos Limpios',
       'Pre Candidatos',
       'Excel',
       'Eliminar',
@@ -730,7 +730,7 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
       'Demarcación',
       'Detalles',
       'Descargar Ejemplo',
-      'Descargar Formato',
+      'Archivos Limpios',
       'Pre Candidatos',
       'Excel',
       'Eliminar',
@@ -785,7 +785,7 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
       'Demarcación',
       'Detalles',
       'Descargar Ejemplo',
-      'Descargar Formato',
+      'Archivos Limpios',
       'Pre Candidatos',
       'Excel',
       'Eliminar',
@@ -805,7 +805,7 @@ describe('DemarcacionTable - columnas por rol (Estatus y Comentarios)', () => {
       'Demarcación',
       'Detalles',
       'Descargar Ejemplo',
-      'Descargar Formato',
+      'Archivos Limpios',
       'Pre Candidatos',
       'Estatus',
       'Validar',
@@ -899,7 +899,7 @@ describe('DemarcacionTable - Descargas por demarcación', () => {
       expect(detailsLink).toHaveAttribute('target', '_blank')
 
       const example = screen.getByRole('button', { name: 'Descargar Ejemplo' })
-      const template = screen.getByRole('button', { name: 'Descargar Formato' })
+      const template = screen.getByRole('button', { name: 'Archivos Limpios' })
       await waitFor(() => {
         expect(example).toBeEnabled()
         expect(template).toBeEnabled()
@@ -909,12 +909,40 @@ describe('DemarcacionTable - Descargas por demarcación', () => {
 
       expect(mocks.downloadDemoFileByName).toHaveBeenCalledWith(
         'token123',
+        'EJEMPLO LLENADO - AYTO AGUASCALIENTES.xlsx',
         'EJEMPLO LLENADO - AYTO AGUASCALIENTES.xlsx'
       )
-      expect(mocks.downloadDemoFileByName).toHaveBeenCalledWith('token123', 'AYTO AGUASCALIENTES.xlsx')
+      expect(mocks.downloadDemoFileByName).toHaveBeenCalledWith('token123', 'AYTO AGUASCALIENTES.xlsx', 'AYTO AGUASCALIENTES.xlsx')
       await waitFor(() => expect(template).toBeEnabled())
     }
   )
+
+  it('uses shared district files while naming downloads after the demarcation', async () => {
+    mocks.isDemoFileAvailable.mockResolvedValue(true)
+    mocks.downloadDemoFileByName.mockResolvedValue(undefined)
+    renderTable([{
+      ...registeredRow,
+      catalogo: { ...registeredRow.catalogo, alias: 'DTTO 1' },
+    }])
+
+    const example = screen.getByRole('button', { name: 'Descargar Ejemplo' })
+    const clean = screen.getByRole('button', { name: 'Archivos Limpios' })
+    await waitFor(() => expect(example).toBeEnabled())
+    await waitFor(() => expect(clean).toBeEnabled())
+    fireEvent.click(example)
+    fireEvent.click(clean)
+
+    expect(mocks.isDemoFileAvailable).toHaveBeenCalledWith(
+      'DIPUTADO MR.xlsx', expect.any(AbortSignal)
+    )
+    expect(mocks.downloadDemoFileByName).toHaveBeenCalledWith(
+      'token123', 'DIPUTADO MR.xlsx', 'DTTO 1.xlsx'
+    )
+    expect(mocks.downloadDemoFileByName).toHaveBeenCalledWith(
+      'token123', 'EJEMPLO LLENADO - DIP MR.xlsx', 'EJEMPLO LLENADO - DTTO 1.xlsx'
+    )
+    await waitFor(() => expect(clean).toBeEnabled())
+  })
 
   it('disables only the missing file and keeps downloads available without a folio', async () => {
     mocks.isDemoFileAvailable.mockImplementation(async (filename) => filename === 'GUBERNATURA.xlsx')
@@ -925,7 +953,7 @@ describe('DemarcacionTable - Descargas por demarcación', () => {
     renderTable([row])
 
     expect(await screen.findByRole('button', { name: 'No disponible' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Descargar Formato' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Archivos Limpios' })).toBeEnabled()
     expect(screen.queryByRole('link', { name: 'Detalles' })).not.toBeInTheDocument()
   })
 })

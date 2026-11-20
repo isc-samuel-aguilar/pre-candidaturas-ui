@@ -8,7 +8,8 @@ import {
 } from '../../../../services/demoFilesService'
 
 interface DemarcacionDownloadButtonProps {
-  filename: string
+  filename?: string
+  downloadFilename?: string
   label: string
   token: string | null
   onError: (message: string) => void
@@ -16,6 +17,7 @@ interface DemarcacionDownloadButtonProps {
 
 export default function DemarcacionDownloadButton({
   filename,
+  downloadFilename,
   label,
   token,
   onError,
@@ -24,6 +26,10 @@ export default function DemarcacionDownloadButton({
   const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
+    if (!filename) {
+      setAvailable(false)
+      return
+    }
     const controller = new AbortController()
     setAvailable(null)
 
@@ -40,9 +46,10 @@ export default function DemarcacionDownloadButton({
   }, [filename])
 
   const handleDownload = async () => {
+    if (!filename) return
     setDownloading(true)
     try {
-      await downloadDemoFileByName(token, filename)
+      await downloadDemoFileByName(token, filename, downloadFilename)
     } catch (error) {
       if (isDemoFileError(error)) {
         if (error.type === 'missing') setAvailable(false)

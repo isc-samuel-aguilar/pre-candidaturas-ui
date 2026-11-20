@@ -36,7 +36,7 @@ import type { DemarcacionRow, DemarcacionStatus } from '../../../../types/demarc
 import { StatusEnum } from '../../../../types/enums'
 import { useAuth } from '../../../../contexts/AuthContext'
 import { PrecandidatosTable } from '../../../../components/PrecandidatosTable'
-import { demarcacionDemoFilename } from '../../../../services/demoFilesCatalog'
+import { getDemarcationDemoFile } from '../../../../services/demoFilesCatalog'
 import { DemarcacionDocumentsTable } from './DemarcacionDocumentsTable'
 import DemarcacionDownloadButton from './DemarcacionDownloadButton'
 
@@ -372,7 +372,7 @@ export function DemarcacionTable({
               <TableCell>Demarcación</TableCell>
               <TableCell align="center">Detalles</TableCell>
               <TableCell align="center">Descargar Ejemplo</TableCell>
-              <TableCell align="center">Descargar Formato</TableCell>
+              <TableCell align="center">Archivos Limpios</TableCell>
               <TableCell align="center">Pre Candidatos</TableCell>
               {showUploadCols && <TableCell align="center">Excel</TableCell>}
               {showUploadCols && <TableCell align="center">Eliminar</TableCell>}
@@ -390,8 +390,8 @@ export function DemarcacionTable({
               const isUploading = uploadingIds.has(row.catalogo.id)
               const isExpanded = expandedRows.has(row.catalogo.id)
               const label = getVisibleLabel(row)
-              const exampleFilename = demarcacionDemoFilename(label, 'example')
-              const templateFilename = demarcacionDemoFilename(label, 'clean')
+              const exampleFile = getDemarcationDemoFile(label, 'example')
+              const cleanFile = getDemarcationDemoFile(label, 'clean')
 
               return (
                 <Fragment key={row.catalogo.id}>
@@ -466,8 +466,9 @@ export function DemarcacionTable({
                     </TableCell>
                     <TableCell align="center">
                       <DemarcacionDownloadButton
-                        key={exampleFilename}
-                        filename={exampleFilename}
+                        key={exampleFile?.filename}
+                        filename={exampleFile?.filename}
+                        downloadFilename={exampleFile?.downloadFilename}
                         label="Descargar Ejemplo"
                         token={token}
                         onError={setDownloadError}
@@ -475,9 +476,10 @@ export function DemarcacionTable({
                     </TableCell>
                     <TableCell align="center">
                       <DemarcacionDownloadButton
-                        key={templateFilename}
-                        filename={templateFilename}
-                        label="Descargar Formato"
+                        key={cleanFile?.filename}
+                        filename={cleanFile?.filename}
+                        downloadFilename={cleanFile?.downloadFilename}
+                        label="Archivos Limpios"
                         token={token}
                         onError={setDownloadError}
                       />

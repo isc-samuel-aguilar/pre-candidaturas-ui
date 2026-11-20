@@ -13,7 +13,7 @@ export const Route = createFileRoute('/dashboard/excel/')({
   beforeLoad: ({ context }) => {
     const { auth } = context as RouterContext
     const role = auth.user?.role
-    if (role !== 'ADMIN' && role !== 'REGISTER') {
+    if (role !== 'REGISTER') {
       throw redirect({ to: '/dashboard' })
     }
   },

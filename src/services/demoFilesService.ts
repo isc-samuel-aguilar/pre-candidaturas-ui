@@ -69,9 +69,10 @@ export async function isDemoFileAvailable(
 
 export async function downloadDemoFileByName(
   token: string | null,
-  filename: string
+  filename: string,
+  downloadFilename: string = filename
 ): Promise<void> {
-  await openOrDownloadFile(filename, async () => {
+  await openOrDownloadFile(downloadFilename, async () => {
     await validateSession(token)
 
 

@@ -56,6 +56,75 @@ export function getDemoFilename(entry: DemoFileEntry, type: DemoFileType): strin
 
 export const DEMO_FILES_URL_PREFIX = '/demo-files'
 
+export interface DemarcationDemoMapping {
+  entryId: string
+  demarcations: readonly string[]
+  prefixes?: readonly string[]
+  renameDownload?: boolean
+}
+
+export const DEMARCATION_DEMO_MAPPINGS: readonly DemarcationDemoMapping[] = [
+  { entryId: 'ayto-aguascalientes', demarcations: ['AYTO AGUASCALIENTES'] },
+  { entryId: 'gubernatura', demarcations: ['GUBERNATURA'] },
+  { entryId: 'diputado-rp', demarcations: ['DIPUTADO RP'] },
+  { entryId: 'diputado-mr', demarcations: [], prefixes: ['DTTO'], renameDownload: true },
+  {
+    entryId: 'aytos-menos-de-30-hab',
+    demarcations: [
+      'AYTO ASIENTOS',
+      'AYTO COSIO',
+      'AYTO EL LLANO',
+      'AYTO SAN JOSE DE GRACIA',
+      'AYTO TEPEZALA',
+    ],
+    renameDownload: true,
+  },
+  {
+    entryId: 'aytos-mas-de-30-hab',
+    demarcations: [
+      'AYTO CALVILLO',
+      'AYTO JESUS MARIA',
+      'AYTO PABELLON DE ARTEAGA',
+      'AYTO RINCON DE ROMOS',
+      'AYTO SAN FRANCISCO DE LOS ROMO',
+    ],
+    renameDownload: true,
+  },
+]
+
+export interface DemarcationDemoFile {
+  filename: string
+  downloadFilename: string
+}
+
+function normalizeDemarcation(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase()
+}
+
+export function getDemarcationDemoFile(
+  demarcation: string,
+  type: DemoFileType
+): DemarcationDemoFile | undefined {
+  const normalized = normalizeDemarcation(demarcation)
+  const mapping = DEMARCATION_DEMO_MAPPINGS.find((candidate) =>
+    candidate.demarcations.some((name) => normalizeDemarcation(name) === normalized) ||
+    candidate.prefixes?.some((prefix) => normalized.startsWith(normalizeDemarcation(prefix)))
+  )
+  const entry = mapping && getDemoFileEntry(mapping.entryId)
+  if (!entry) return undefined
+
+  const filename = getDemoFilename(entry, type)
+  return {
+    filename,
+    downloadFilename: mapping.renameDownload ? demarcacionDemoFilename(demarcation.trim(), type) : filename,
+  }
+}
+
 export function demarcacionDemoFilename(demarcacion: string, type: DemoFileType): string {
   return type === 'example' ? `EJEMPLO LLENADO - ${demarcacion}.xlsx` : `${demarcacion}.xlsx`
 }

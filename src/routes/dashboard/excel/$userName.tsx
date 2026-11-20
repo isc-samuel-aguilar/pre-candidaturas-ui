@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Typography, Snackbar, Alert } from '@mui/material'
 import { useDemarcaciones } from '../../../hooks/useDemarcaciones'
 import { FolioSection } from './components/FolioSection'
+import { ExamplesSection } from './components/ExamplesSection'
 import { DemarcacionTable } from './components/DemarcacionTable'
 import type { RouterContext } from '../../../main'
 import type { DemarcacionRow } from '../../../types/demarcacion'
@@ -141,6 +142,8 @@ function ExcelValidationPage() {
       )}
 
       <FolioSection folio={folio} demarcaciones={demarcaciones} loading={loading} />
+
+      <ExamplesSection />
 
       <DemarcacionTable
         demarcaciones={demarcaciones}
