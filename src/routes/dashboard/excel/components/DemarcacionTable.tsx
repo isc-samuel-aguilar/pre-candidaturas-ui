@@ -159,7 +159,7 @@ export function DemarcacionTable({
         const isGubernaturaA = /^gubernatura/i.test(labelA.trim())
         const isGubernaturaB = /^gubernatura/i.test(labelB.trim())
         if (isGubernaturaA !== isGubernaturaB) return isGubernaturaA ? -1 : 1
-        return labelA.localeCompare(labelB, 'es')
+        return labelA.localeCompare(labelB, 'es', { numeric: true })
       })
   }, [demarcaciones, searchText, statusFilter])
 

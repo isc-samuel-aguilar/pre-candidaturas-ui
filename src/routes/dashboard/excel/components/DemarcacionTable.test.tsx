@@ -312,6 +312,32 @@ describe('DemarcacionTable - C11 (orden, título, cabecera, expansión)', () => 
     ])
   })
 
+  it('sorts district numbers numerically in the demarcation list', () => {
+    const districtRows: DemarcacionRow[] = [10, 2, 11, 9, 1].map((number) => ({
+      catalogo: {
+        id: 100 + number,
+        ambito: 'DISTRITAL',
+        demarcacion: String(number),
+        alias: 'DTTO ' + number,
+      },
+      folioDemarcacion: null,
+      status: null,
+    }))
+
+    renderTable([...districtRows, zetaRow, gubernaturaRow, sinAliasRow])
+
+    expect(renderedDemarcacionLabels()).toEqual([
+      'Gubernatura Municipal',
+      'DTTO 1',
+      'DTTO 2',
+      'DTTO 9',
+      'DTTO 10',
+      'DTTO 11',
+      'SEGUNDA',
+      'ZETA DEMARC',
+    ])
+  })
+
   it('keeps the filtered rows sorted', () => {
     renderTable([zetaRow, gubernaturaRow, sinAliasRow])
 
